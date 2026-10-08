@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS slots (
   start_time text NOT NULL,
   end_time   text NOT NULL
 );
+ALTER TABLE slots ADD COLUMN IF NOT EXISTS is_break boolean NOT NULL DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS buildings (
   id   text PRIMARY KEY,
@@ -62,13 +63,16 @@ CREATE TABLE IF NOT EXISTS timetable (
   day      int  NOT NULL CHECK (day BETWEEN 0 AND 5),
   slot_id  text NOT NULL REFERENCES slots(id)   ON DELETE RESTRICT,
   title    text NOT NULL,
-  faculty  text NOT NULL,
+  faculty  text NOT NULL DEFAULT '',
   class_id text NOT NULL REFERENCES classes(id) ON DELETE RESTRICT,
   -- one class per venue, and one class per section, in any period
   CONSTRAINT timetable_venue_unique UNIQUE (res_id, day, slot_id) DEFERRABLE INITIALLY DEFERRED,
   CONSTRAINT timetable_class_unique UNIQUE (class_id, day, slot_id) DEFERRABLE INITIALLY DEFERRED
 );
-CREATE UNIQUE INDEX IF NOT EXISTS timetable_faculty_unique ON timetable (day, slot_id, lower(faculty));
+-- faculty is optional: only named faculty are checked for clashes
+ALTER TABLE timetable ALTER COLUMN faculty SET DEFAULT '';
+DROP INDEX IF EXISTS timetable_faculty_unique;
+CREATE UNIQUE INDEX timetable_faculty_unique ON timetable (day, slot_id, lower(faculty)) WHERE faculty <> '';
 
 -- A scheduled class that does not take place on one date (industrial visit, placement drive...).
 CREATE TABLE IF NOT EXISTS releases (

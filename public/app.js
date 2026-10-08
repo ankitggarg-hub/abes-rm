@@ -105,6 +105,7 @@ var ui={booting:true,loginErr:'',loginBusy:false,userId:null,tab:'overview',mtab
 
 /* ---------- selectors ---------- */
 var slotList=function(){return S.slots.slice().sort(function(a,b){return a.start.localeCompare(b.start)})};
+var isBrk=function(id){var x=S.slots.filter(function(s){return s.id===id})[0];return !!(x&&x.isBreak)};
 var slotById=function(id){return S.slots.filter(function(s){return s.id===id})[0]};
 var bldById=function(id){return S.buildings.filter(function(b){return b.id===id})[0]};
 var floorById=function(id){return S.floors.filter(function(f){return f.id===id})[0]};
@@ -119,7 +120,7 @@ var deptById=function(id){return S.depts.filter(function(d){return d.id===id})[0
 var me=function(){return S.users.filter(function(u){return u.id===ui.userId})[0]||{id:'',name:'',role:'stakeholder',deptId:null,email:''}};
 var canBook=function(){return ['admin','head','stakeholder'].indexOf(me().role)>-1};
 var canApprove=function(){return ['admin','head'].indexOf(me().role)>-1};
-function slotRange(a,b){var l=slotList(),i=l.map(function(s){return s.id}).indexOf(a),j=l.map(function(s){return s.id}).indexOf(b);if(i<0)i=0;if(j<0)j=l.length-1;if(i>j){var t=i;i=j;j=t}return l.slice(i,j+1)}
+function slotRange(a,b){var l=slotList(),i=l.map(function(s){return s.id}).indexOf(a),j=l.map(function(s){return s.id}).indexOf(b);if(i<0)i=0;if(j<0)j=l.length-1;if(i>j){var t=i;i=j;j=t}return l.slice(i,j+1).filter(function(x){return !x.isBreak})}
 function timeRange(ids){var l=slotList().filter(function(s){return ids.indexOf(s.id)>-1});return l.length?l[0].start+'–'+l[l.length-1].end:''}
 var REASONS=['Industrial visit','Placement activity','Seminar or workshop','Exam or test','Holiday','Faculty on leave','Other'];
 function relFor(ttId,date){for(var i=0;i<S.releases.length;i++){var r=S.releases[i];if(r.ttId===ttId&&r.date===date)return r}return null}
@@ -162,7 +163,7 @@ function statusBadge(s){return s==='confirmed'?'<span class="badge b-ok">Confirm
 var fld=function(label,inner,cls){return '<label class="fld '+(cls||'')+'"><span>'+label+'</span>'+inner+'</label>'};
 var tin=function(n,v,x){return '<input id="f-'+n+'" name="'+n+'" value="'+esc(v)+'" '+(x||'')+'>'};
 var sel=function(n,opts,v){return '<select id="f-'+n+'" name="'+n+'">'+opts.map(function(o){return '<option value="'+esc(o[0])+'"'+(String(o[0])===String(v)?' selected':'')+'>'+esc(o[1])+'</option>'}).join('')+'</select>'};
-var slotOpts=function(){return slotList().map(function(s){return [s.id,s.label+'  '+s.start+'–'+s.end]})};
+var slotOpts=function(){return slotList().filter(function(s){return !s.isBreak}).map(function(s){return [s.id,s.label+'  '+s.start+'–'+s.end]})};
 var deptOpts=function(central){return (central?[['',central]]:[]).concat(S.depts.map(function(d){return [d.id,d.code+' – '+d.name]}))};
 var emptyBox=function(m){return '<div class="empty">'+m+'</div>'};
 var legend='<div class="legend"><span><i style="border-style:dashed"></i>Free</span><span><i style="background:hsl(205 var(--dept-s) var(--dept-l))"></i>Class (department colour)</span><span><i style="background:var(--event-bg);border-color:var(--event)"></i>Event</span><span><i style="background:var(--free-bg);border-color:var(--free)"></i>Free, class away</span></div>';
@@ -176,7 +177,7 @@ function vOverview(){
   var up=S.events.filter(function(e){return e.date>=today&&e.status!=='rejected'}).sort(function(a,b){return a.date.localeCompare(b.date)}).slice(0,6);
   var weekEv=S.events.filter(function(e){return e.date>=today&&e.date<=addDays(today,6)&&e.status!=='rejected'}).length;
   var pend=S.events.filter(function(e){return e.status==='pending'}).length;
-  var perWeek=6*sl.length;
+  var perWeek=6*sl.filter(function(s){return !s.isBreak}).length;
   var bars=S.depts.map(function(d){
     var rs=S.resources.filter(function(r){return r.deptId===d.id});
     var used=S.tt.filter(function(t){return rs.some(function(r){return r.id===t.resId})}).length;
@@ -185,7 +186,8 @@ function vOverview(){
   }).join('');
   var central=S.resources.filter(function(r){return !r.deptId}).length;
   var freeHtml;
-  if(cur){
+  if(cur&&cur.isBreak){freeHtml='<p class="note">'+esc(cur.label)+' ('+cur.start+'–'+cur.end+') is a break. No classes run; every venue is quiet until the next period.</p>'}
+  else if(cur){
     freeHtml='<p class="note" style="margin:0 0 8px">'+esc(cur.label)+' is running now ('+cur.start+'–'+cur.end+'). '+freeNow.length+' of '+S.resources.length+' venues are free.</p>'+
       (dow(today)===0?'<p class="note">Sunday: no classes are scheduled.</p>':'')+
       '<div class="chips">'+freeNow.slice(0,16).map(function(r){return '<span class="chip">'+esc(r.name)+'</span>'}).join('')+(freeNow.length>16?'<span class="note">+'+(freeNow.length-16)+' more</span>':'')+'</div>';
@@ -224,8 +226,9 @@ function vChanges(){
   var u=me(),sl=slotList();
   if(!sl.length)return emptyBox('No time slots are defined yet.');
   if(u.role!=='hod'&&(!ui.chDept||!deptById(ui.chDept)))ui.chDept=S.depts.length?S.depts[0].id:null;
-  if(!ui.chSlotA||!slotById(ui.chSlotA))ui.chSlotA=sl[0].id;
-  if(!ui.chSlotB||!slotById(ui.chSlotB))ui.chSlotB=sl[sl.length-1].id;
+  var cs=slotOpts();
+  if(!ui.chSlotA||!slotById(ui.chSlotA)||isBrk(ui.chSlotA))ui.chSlotA=cs.length?cs[0][0]:sl[0].id;
+  if(!ui.chSlotB||!slotById(ui.chSlotB)||isBrk(ui.chSlotB))ui.chSlotB=cs.length?cs[cs.length-1][0]:sl[sl.length-1].id;
   var dept=u.role==='hod'?u.deptId:ui.chDept;
   if(ui.chClass&&(!classById(ui.chClass)||classById(ui.chClass).deptId!==dept))ui.chClass='';
   var cls=classesOf(dept),tg=chTargets();
@@ -270,9 +273,10 @@ function vAvail(){
   var head='<tr><th class="rh">Venue</th>'+sl.map(function(s){return '<th class="'+(win.indexOf(s.id)>-1?'hl':'')+'">'+esc(s.label)+'<small>'+s.start+'–'+s.end+'</small></th>'}).join('')+'</tr>';
   var body=rs.map(function(r){
     return '<tr><th class="rh">'+tcode(r.type)+esc(r.name)+'<small>'+r.capacity+' seats · '+(deptById(r.deptId)?deptById(r.deptId).code:'Central')+'</small></th>'+sl.map(function(s){
+      if(s.isBreak)return '<td><div class="cell brk">Break</div></td>';
       var b=busyAt(r.id,date,s.id);
       if(!b){var aw=awayAt(r.id,date,s.id);return '<td><'+(canBook()?'button data-act="book" data-res="'+r.id+'" data-from="'+s.id+'" data-to="'+s.id+'" class="cell free pick'+(aw?' rel':'')+'" title="Book '+esc(r.name)+' at '+s.start+(aw?' (class away: '+esc(classLabel(aw.t.classId)+', '+aw.rel.reason)+')':'')+'"':'div class="cell free'+(aw?' rel':'')+'"'+(aw?' title="'+esc('Class away: '+classLabel(aw.t.classId)+', '+aw.rel.reason)+'"':''))+'><i>Free</i>'+(aw?'<em>'+esc(classLabel(aw.t.classId))+' away</em>':'')+'</'+(canBook()?'button':'div')+'></td>'}
-      if(b.kind==='class'){var d=deptById(r.deptId);return '<td><div class="cell cls" style="--h:'+(d?d.h:200)+'" title="'+esc(b.e.title+' · '+b.e.faculty)+'"><b>'+esc(b.e.title)+'</b><span>'+esc(classLabel(b.e.classId))+'</span></div></td>'}
+      if(b.kind==='class'){var d=deptById(r.deptId);return '<td><div class="cell cls" style="--h:'+(d?d.h:200)+'" title="'+esc(b.e.title+(b.e.faculty?' · '+b.e.faculty:''))+'"><b>'+esc(b.e.title)+'</b><span>'+esc(classLabel(b.e.classId))+'</span></div></td>'}
       return '<td><div class="cell ev"><b>'+esc(b.ev.title)+'</b><span>'+(b.ev.status==='pending'?'Requested':'Event')+'</span></div></td>';
     }).join('')+'</tr>';
   }).join('');
@@ -308,11 +312,13 @@ function vTimetable(){
   if(!rs.length)return head+emptyBox(esc(d.code)+' has no venues yet. The administrator can allocate lecture theatres and labs in Masters → Allocation.');
   if(!ui.ttRes||rs.every(function(r){return r.id!==ui.ttRes}))ui.ttRes=rs[0].id;
   if(!sl.length)return head+emptyBox('No time slots are defined yet.');
-  var modes='<div class="seg"><button class="btn sm'+(ui.ttMode==='week'?' on':'')+'" data-act="mode" data-v="week">Weekly, one venue</button><button class="btn sm'+(ui.ttMode==='day'?' on':'')+'" data-act="mode" data-v="day">Daily, all venues</button></div>';
+  var modes='<div class="seg"><button class="btn sm'+(ui.ttMode==='week'?' on':'')+'" data-act="mode" data-v="week">Weekly, one venue</button><button class="btn sm'+(ui.ttMode==='day'?' on':'')+'" data-act="mode" data-v="day">Daily, all venues</button></div> <button class="btn primary sm" data-act="fullday">Allot a full day</button>';
+  var nb=sl.filter(function(x){return !x.isBreak}).length;
   var grid='',summary='';
   var mk=function(r,day,s){
+    if(s.isBreak)return '<td><div class="cell brk">'+esc(s.label)+'</div></td>';
     var e=S.tt.filter(function(t){return t.resId===r.id&&t.day===day&&t.slotId===s.id})[0];
-    return e?'<td><button class="cell cls edit" style="--h:'+d.h+'" data-act="ttcell" data-id="'+e.id+'" data-res="'+r.id+'" data-day="'+day+'" data-slot="'+s.id+'"><b>'+esc(e.title)+'</b><span>'+esc(e.faculty)+'</span><span>'+esc(classLabel(e.classId))+'</span></button></td>'
+    return e?'<td><button class="cell cls edit" style="--h:'+d.h+'" data-act="ttcell" data-id="'+e.id+'" data-res="'+r.id+'" data-day="'+day+'" data-slot="'+s.id+'"><b>'+esc(e.title)+'</b>'+(e.faculty?'<span>'+esc(e.faculty)+'</span>':'')+'<span>'+esc(classLabel(e.classId))+'</span></button></td>'
       :'<td><button class="cell free edit" data-act="ttcell" data-res="'+r.id+'" data-day="'+day+'" data-slot="'+s.id+'" aria-label="Add class '+DAYF[day]+' '+esc(s.label)+'"><i>+ Add</i></button></td>';
   };
   var tm=function(s){return '<th class="tm">'+esc(s.label)+'<small>'+s.start+'–'+s.end+'</small></th>'};
@@ -321,13 +327,13 @@ function vTimetable(){
     grid='<div class="seg">'+rs.map(function(x){return '<button class="btn sm'+(x.id===r.id?' on':'')+'" data-act="ttres" data-v="'+x.id+'">'+esc(x.name)+'</button>'}).join('')+'</div>'+
       '<div class="scroll"><table class="grid"><thead><tr><th class="tm">Period</th>'+DAYS.map(function(x,i){return '<th>'+DAYF[i]+'</th>'}).join('')+'</tr></thead><tbody>'+
       sl.map(function(s){return '<tr>'+tm(s)+DAYS.map(function(x,i){return mk(r,i,s)}).join('')+'</tr>'}).join('')+'</tbody></table></div>';
-    summary=esc(r.name)+' · '+esc(r.type)+' · '+r.capacity+' seats · '+used+' of '+(6*sl.length)+' weekly slots in use';
+    summary=esc(r.name)+' · '+esc(r.type)+' · '+r.capacity+' seats · '+used+' of '+(6*nb)+' weekly slots in use';
   } else {
     var used2=S.tt.filter(function(t){return rs.some(function(r){return r.id===t.resId})&&t.day===ui.ttDay}).length;
     grid='<div class="seg">'+DAYF.map(function(x,i){return '<button class="btn sm'+(i===ui.ttDay?' on':'')+'" data-act="ttday" data-v="'+i+'">'+x+'</button>'}).join('')+'</div>'+
       '<div class="scroll"><table class="grid"><thead><tr><th class="tm">Period</th>'+rs.map(function(x){return '<th>'+esc(x.name)+'<small>'+x.capacity+' seats</small></th>'}).join('')+'</tr></thead><tbody>'+
       sl.map(function(s){return '<tr>'+tm(s)+rs.map(function(x){return mk(x,ui.ttDay,s)}).join('')+'</tr>'}).join('')+'</tbody></table></div>';
-    summary=DAYF[ui.ttDay]+' · '+used2+' of '+(rs.length*sl.length)+' venue-periods scheduled';
+    summary=DAYF[ui.ttDay]+' · '+used2+' of '+(rs.length*nb)+' venue-periods scheduled';
   }
   return head+'<div class="filters" style="justify-content:space-between;align-items:center">'+modes+'<span class="note">'+summary+'</span></div>'+grid;
 }
@@ -366,14 +372,15 @@ function vClasses(){
   var c=classById(ui.clId);
   var grid='<div class="scroll"><table class="grid"><thead><tr><th class="tm">Period</th>'+DAYF.map(function(n){return '<th>'+n+'</th>'}).join('')+'</tr></thead><tbody>'+sl.map(function(s){
     return '<tr><th class="tm">'+esc(s.label)+'<small>'+s.start+'–'+s.end+'</small></th>'+DAYF.map(function(n,i){
+      if(s.isBreak)return '<td><div class="cell brk">Break</div></td>';
       var e=S.tt.filter(function(t){return t.classId===c.id&&t.day===i&&t.slotId===s.id})[0],r=e&&resById(e.resId);
-      return '<td>'+(e?'<div class="cell cls" style="--h:'+d.h+'" title="'+esc(r?locStr(r):'')+'"><b>'+esc(e.title)+'</b><span>'+esc(e.faculty)+'</span><span>Room: '+esc(r?r.name:'?')+'</span></div>':'<div class="cell free"><i>–</i></div>')+'</td>'}).join('')+'</tr>'}).join('')+'</tbody></table></div>';
+      return '<td>'+(e?'<div class="cell cls" style="--h:'+d.h+'" title="'+esc(r?locStr(r):'')+'"><b>'+esc(e.title)+'</b>'+(e.faculty?'<span>'+esc(e.faculty)+'</span>':'')+'<span>Room: '+esc(r?r.name:'?')+'</span></div>':'<div class="cell free"><i>–</i></div>')+'</td>'}).join('')+'</tr>'}).join('')+'</tbody></table></div>';
   return head+'<div class="scroll"><table class="tbl"><thead><tr><th>Year and section</th><th>Main classroom</th><th>All rooms used (periods per week)</th><th>Periods</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
     '<section><h3 style="margin-bottom:10px">Week of '+esc(classFull(c))+'</h3>'+grid+'</section>';
 }
 function mSlots(){
   return '<div class="scroll"><table class="tbl"><thead><tr><th>Label</th><th>Start</th><th>End</th><th>Minutes</th><th></th></tr></thead><tbody>'+
-  slotList().map(function(s){var k='slot:'+s.id;return '<tr><td><b>'+esc(s.label)+'</b></td><td class="mono">'+s.start+'</td><td class="mono">'+s.end+'</td><td class="mono">'+(toMin(s.end)-toMin(s.start))+'</td><td class="act"><button class="btn sm" data-act="edit" data-t="slot" data-id="'+s.id+'">Edit</button><button class="btn sm danger" data-act="del" data-k="'+k+'">'+(ui.confirm===k?'Confirm delete':'Delete')+'</button></td></tr>'}).join('')+'</tbody></table></div>'+(S.slots.length?'':emptyBox('No time slots yet.'));
+  slotList().map(function(s){var k='slot:'+s.id;return '<tr><td><b>'+esc(s.label)+'</b>'+(s.isBreak?' <span class="badge b-wait">Break</span>':'')+'</td><td class="mono">'+s.start+'</td><td class="mono">'+s.end+'</td><td class="mono">'+(toMin(s.end)-toMin(s.start))+'</td><td class="act"><button class="btn sm" data-act="edit" data-t="slot" data-id="'+s.id+'">Edit</button><button class="btn sm danger" data-act="del" data-k="'+k+'">'+(ui.confirm===k?'Confirm delete':'Delete')+'</button></td></tr>'}).join('')+'</tbody></table></div>'+(S.slots.length?'':emptyBox('No time slots yet.'));
 }
 function mRes(){
   return '<div class="scroll"><table class="tbl"><thead><tr><th>Venue</th><th>Type</th><th>Building</th><th>Floor</th><th>Seats</th><th>Equipment</th><th>Allocated to</th><th></th></tr></thead><tbody>'+
@@ -405,7 +412,7 @@ function moveSection(v){
   var free=rs.filter(function(r){return !S.tt.some(function(t){return t.id!==v.id&&t.resId===r.id&&t.day===day&&t.slotId===slot})});
   var others=S.tt.filter(function(t){return t.id!==v.id&&t.day===day&&t.slotId===slot});
   var fac=(v.faculty||'').trim().toLowerCase(),cid=v.classId||'';
-  var fc=fac&&others.filter(function(t){return t.faculty.toLowerCase()===fac})[0];
+  var fc=fac&&others.filter(function(t){return t.faculty&&t.faculty.toLowerCase()===fac})[0];
   var cc=cid&&others.filter(function(t){return t.classId===cid})[0];
   var s=slotById(slot),moved=day!==v.day||slot!==v.slotId;
   var list;
@@ -430,14 +437,23 @@ function modalHTML(){
     case 'floor':title=(v.id?'Edit':'Add')+' floor';
       body=fld('Floor name',tin('name',v.name,'required placeholder="4th floor" autocomplete="off"'))+fld('Level (0 = ground, -1 = basement)',tin('level',v.level==null?'':v.level,'type="number" step="1" required'));break;
     case 'slot':title=(v.id?'Edit':'Add')+' time slot';
-      body=fld('Label',tin('label',v.label,'required maxlength="14"'))+'<div class="frow">'+fld('Start',tin('start',v.start||'09:00','type="time" required'))+fld('End',tin('end',v.end||'10:00','type="time" required'))+'</div>';break;
+      body=fld('Label',tin('label',v.label,'required maxlength="14"'))+'<div class="frow">'+fld('Start',tin('start',v.start||'09:00','type="time" required'))+fld('End',tin('end',v.end||'10:00','type="time" required'))+'</div><label class="chk"><input type="checkbox" name="isBreak" value="1"'+(v.isBreak?' checked':'')+'> This is a break (lunch). No classes or events can be placed in it.</label>';break;
     case 'resource':title=(v.id?'Edit':'Add')+' venue';
       body=fld('Name',tin('name',v.name,'required'))+'<div class="frow">'+fld('Type',sel('type',TYPES.map(function(t){return [t,t]}),v.type||TYPES[0]))+fld('Seats',tin('capacity',v.capacity||'','type="number" min="1" required'))+'</div>'+'<div class="frow">'+fld('Building',sel('buildingId',S.buildings.map(function(b){return [b.id,b.name]}),v.buildingId||(S.buildings[0]||{}).id))+fld('Floor',sel('floorId',floorList().map(function(f){return [f.id,f.name]}),v.floorId||(floorList()[0]||{}).id))+'</div>'+fld('Equipment',tin('equipment',v.equipment))+fld('Allocated to',sel('deptId',deptOpts('Central pool (no department)'),v.deptId||''));break;
     case 'user':title=(v.id?'Edit':'Add')+' user';
       body=fld('Full name',tin('name',v.name,'required'))+fld('Email (used to sign in)',tin('email',v.email,'type="email" required autocomplete="off"'))+fld(v.id?'New password (leave empty to keep the current one)':'Password',tin('password','','type="password" minlength="8" autocomplete="new-password"'+(v.id?'':' required')))+'<div class="frow">'+fld('Role',sel('role',Object.keys(ROLE).map(function(k){return [k,ROLE[k]]}),v.role||'stakeholder'))+fld('Department (department heads)',sel('deptId',deptOpts('None'),v.deptId||''))+'</div>';break;
     case 'tt':{var r=resById(v.resId),s=slotById(v.slotId);title=(v.id?'Edit':'Add')+' class';
       extra='<p class="ctx"><b>'+esc(r?r.name:'')+'</b> · '+DAYF[v.day]+' · '+(s?esc(s.label)+' '+s.start+'–'+s.end:'')+'</p>';
-      body=fld('Subject or session',tin('title',v.title,'required autocomplete="off"'))+'<div class="frow">'+fld('Faculty',tin('faculty',v.faculty,'required autocomplete="off"'))+fld('Year and section',(function(){var dc=r?classesOf(r.deptId):[];return dc.length?sel('classId',[['','Choose year and section']].concat(dc.map(function(c){return [c.id,classFull(c)+(c.strength?' ('+c.strength+' students)':'')]})),v.classId||(!v.id&&dc.some(function(c){return c.id===ui.lastClass})?ui.lastClass:'')):'<span class="err">No years or sections exist for this department. Add them in Masters → Years & sections.</span>'})())+'</div>'+(v.id?moveSection(v)+(v.classId&&me().role!=='stakeholder'?'<p class="note" style="margin:0">Class away on a particular day? <button type="button" class="btn sm" data-act="gochange" data-cls="'+esc(v.classId)+'">Release this class for a date</button></p>':''):'');break}
+      body=fld('Subject or session',tin('title',v.title,'required autocomplete="off"'))+'<div class="frow">'+fld('Faculty (optional)',tin('faculty',v.faculty,'autocomplete="off"'))+fld('Year and section',(function(){var dc=r?classesOf(r.deptId):[];return dc.length?sel('classId',[['','Choose year and section']].concat(dc.map(function(c){return [c.id,classFull(c)+(c.strength?' ('+c.strength+' students)':'')]})),v.classId||(!v.id&&dc.some(function(c){return c.id===ui.lastClass})?ui.lastClass:'')):'<span class="err">No years or sections exist for this department. Add them in Masters → Years & sections.</span>'})())+'</div>'+(v.id?moveSection(v)+(v.classId&&me().role!=='stakeholder'?'<p class="note" style="margin:0">Class away on a particular day? <button type="button" class="btn sm" data-act="gochange" data-cls="'+esc(v.classId)+'">Release this class for a date</button></p>':''):'');break}
+    case 'fullday':{title='Allot a full day';
+      var fdD=deptById(me().role==='admin'?ui.ttDept:me().deptId),fdRs=S.resources.filter(function(x){return fdD&&x.deptId===fdD.id}),fdCl=fdD?classesOf(fdD.id):[];
+      var fdDays=[].concat(v.days||[]).map(String);
+      extra='<p class="ctx">One subject and one section for several periods in a row, on one or more days. Periods that are already taken, and breaks, are skipped.</p>';
+      body=fld('Venue',sel('resId',fdRs.map(function(x){return [x.id,x.name+' ('+x.capacity+' seats)']}),v.resId))+
+        '<fieldset class="days"><legend>Days</legend>'+DAYF.map(function(n,i){return '<label class="chk"><input type="checkbox" name="days" value="'+i+'"'+(fdDays.indexOf(String(i))>-1?' checked':'')+'> '+n+'</label>'}).join('')+'</fieldset>'+
+        '<div class="frow">'+fld('From period',sel('from',slotOpts(),v.from))+fld('To period',sel('to',slotOpts(),v.to))+'</div>'+
+        fld('Year and section',sel('classId',[['','Choose year and section']].concat(fdCl.map(function(c){return [c.id,classFull(c)]})),v.classId||''))+
+        fld('Subject or session',tin('title',v.title,'required autocomplete="off"'))+fld('Faculty (optional)',tin('faculty',v.faculty,'autocomplete="off"'));break}
     case 'book':{var r2=resById(v.resId);title='Book '+(r2?r2.name:'venue');
       extra='<p class="ctx">'+(r2?esc(r2.type)+' · '+r2.capacity+' seats · '+esc(locStr(r2)):'')+'</p>';
       body=fld('Event title',tin('title',v.title,'required autocomplete="off"'))+'<div class="frow">'+fld('Date',tin('date',v.date,'type="date" required'))+fld('Expected attendees',tin('attendees',v.attendees||'','type="number" min="1"'))+'</div><div class="frow">'+fld('From',sel('from',slotOpts(),v.from))+fld('To',sel('to',slotOpts(),v.to))+'</div>'+fld('Organiser',tin('by',v.by,'required'+(me().role==='stakeholder'?' readonly':'')))+fld('Notes',tin('notes',v.notes,'placeholder="Equipment, speakers, seating"'));
@@ -527,7 +543,9 @@ function submitForm(type,d){
     if(!v.start||!v.end||toMin(v.end)<=toMin(v.start))return fail('The end time must be after the start time.',d);
     var clash=S.slots.filter(function(s){return s.id!==v.id&&toMin(s.start)<toMin(v.end)&&toMin(v.start)<toMin(s.end)})[0];
     if(clash)return fail('This overlaps '+clash.label+' ('+clash.start+'–'+clash.end+').',d);
-    if(v.id){o=slotById(v.id);o.label=v.label;o.start=v.start;o.end=v.end}else S.slots.push({id:uid('s'),label:v.label,start:v.start,end:v.end});
+    var brk=!!d.isBreak;
+    if(brk&&v.id&&(S.tt.some(function(t){return t.slotId===v.id})||S.events.some(function(e){return e.slotIds.indexOf(v.id)>-1})))return fail('This period already has classes or events. Remove them before marking it as a break.',d);
+    if(v.id){o=slotById(v.id);o.label=v.label;o.start=v.start;o.end=v.end;o.isBreak=brk}else S.slots.push({id:uid('s'),label:v.label,start:v.start,end:v.end,isBreak:brk});
     return done('Time slot saved.');
   }
   if(type==='resource'){
@@ -557,15 +575,34 @@ function submitForm(type,d){
     if(v.id){o=S.users.filter(function(x){return x.id===v.id})[0];o.name=v.name;o.email=v.email;o.role=v.role;o.deptId=dp;if(pw)o.password=pw}else{var nu={id:uid('u'),name:v.name,email:v.email,role:v.role,deptId:dp,password:pw};S.users.push(nu)}
     return done('User saved.');
   }
+  if(type==='fullday'){
+    v.title=(v.title||'').trim();v.faculty=(v.faculty||'').trim();
+    var days=[].concat(v.days||[]).map(Number).filter(function(x){return x>=0&&x<=5});
+    if(!v.resId||!resById(v.resId))return fail('Choose a venue.',d);
+    if(!days.length)return fail('Tick at least one day.',d);
+    if(!v.classId||!classById(v.classId))return fail('Choose the year and section from the list.',d);
+    if(!v.title)return fail('Enter the subject or session.',d);
+    var win=slotRange(v.from,v.to);
+    if(!win.length)return fail('Choose the periods.',d);
+    var added=0,skipped=0;
+    days.forEach(function(day){win.forEach(function(sl){
+      var taken=S.tt.some(function(t){return t.day===day&&t.slotId===sl.id&&(t.resId===v.resId||t.classId===v.classId||(v.faculty&&t.faculty&&t.faculty.toLowerCase()===v.faculty.toLowerCase()))});
+      if(taken){skipped++;return}
+      S.tt.push({id:uid('t'),resId:v.resId,day:day,slotId:sl.id,title:v.title,faculty:v.faculty,classId:v.classId});added++;
+    })});
+    if(!added)return fail('Nothing was added. Every selected period is already taken.',d);
+    ui.lastClass=v.classId;ui.ttRes=v.resId;
+    return done(added+' period'+(added===1?'':'s')+' added'+(skipped?', '+skipped+' skipped because they were already taken':'')+'.');
+  }
   if(type==='tt'){
     v.title=(v.title||'').trim();v.faculty=(v.faculty||'').trim();v.classId=v.classId||'';
-    if(!v.title||!v.faculty)return fail('Enter the subject and the faculty member.',d);
+    if(!v.title)return fail('Enter the subject or session.',d);
     if(!v.classId||!classById(v.classId))return fail('Choose the year and section from the list.',d);
     var ed=!!v.id,day=ed?+v.mvDay:+v.day,slotId=ed?v.mvSlot:v.slotId,resId=ed?(d.moveTo||''):v.resId;
     if(ed&&!resId)return fail('Choose a venue from the free list.',d);
     if(S.tt.some(function(t){return t.id!==v.id&&t.resId===resId&&t.day===day&&t.slotId===slotId}))return fail(resById(resId).name+' is not free at that time.',d);
     var others=S.tt.filter(function(t){return t.id!==v.id&&t.day===day&&t.slotId===slotId});
-    var fc=others.filter(function(t){return t.faculty.toLowerCase()===v.faculty.toLowerCase()})[0];
+    var fc=v.faculty&&others.filter(function(t){return t.faculty&&t.faculty.toLowerCase()===v.faculty.toLowerCase()})[0];
     if(fc)return fail(v.faculty+' already teaches in '+resById(fc.resId).name+' in this period.',d);
     var cc=others.filter(function(t){return t.classId===v.classId})[0];
     if(cc)return fail(classLabel(v.classId)+' already has a class in '+resById(cc.resId).name+' in this period.',d);
@@ -639,6 +676,7 @@ document.addEventListener('click',function(e){
     case 'togglePast':ui.evShowPast=!ui.evShowPast;break;
     case 'add':open(d.t,{});return;
     case 'edit':{var src={dept:S.depts,class:S.classes,slot:S.slots,resource:S.resources,user:S.users,building:S.buildings,floor:S.floors}[d.t].filter(function(x){return x.id===d.id})[0];open(d.t,Object.assign({},src));return}
+    case 'fullday':{var fl=slotOpts();open('fullday',{resId:ui.ttMode==='week'?ui.ttRes:'',days:[ui.ttDay],from:fl.length?fl[0][0]:'',to:fl.length?fl[fl.length-1][0]:'',title:'',faculty:'',classId:ui.lastClass||''});return}
     case 'book':openBook(d.res,d.from,d.to);return;
     case 'ttcell':{var ex=d.id?S.tt.filter(function(t){return t.id===d.id})[0]:null;open('tt',ex?Object.assign({},ex,{mvDay:ex.day,mvSlot:ex.slotId,moveTo:ex.resId}):{resId:d.res,day:+d.day,slotId:d.slot,title:'',faculty:'',classId:''});return}
     case 'unrel':S.releases=S.releases.filter(function(r){return r.id!==d.id});save();toast('Class restored. Its venue is in use again.');break;
@@ -690,7 +728,7 @@ document.addEventListener('submit',function(e){
   }
   var f=e.target.closest('form[data-form]');if(!f)return;
   e.preventDefault();
-  var fd={};new FormData(f).forEach(function(val,key){fd[key]=val});
+  var fd={};new FormData(f).forEach(function(val,key){fd[key]=(key in fd)?[].concat(fd[key],val):val});
   submitForm(ui.modal.type,fd);
 });
 document.addEventListener('keydown',function(e){if(e.key==='Escape'&&ui.modal){ui.modal=null;render()}});

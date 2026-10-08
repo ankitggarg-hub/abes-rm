@@ -5,6 +5,9 @@ Manage lecture theatres, computer labs, seminar halls and auditoriums.
 - **Admin**: masters (departments, years & sections, time slots, buildings, floors, venues, users), allocates venues to departments.
 - **Department heads**: weekly/daily timetable on their allocated venues, and **Class changes** (see below).
 - **Head of institute / stakeholders**: find free venues, request or book events. Heads approve requests.
+- **Breaks**: mark a time slot as a break (Masters → Time slots). Nothing can be scheduled or booked in it.
+- **Full-day allotment**: Timetables → "Allot a full day" fills one subject and section across several periods and days in one step, skipping periods already taken.
+- **Faculty name is optional** on every class.
 - **Class changes**: when a class is away on a given date (industrial visit, placement drive, seminar, exam...), release it. Its regular room shows as free on the Overview, in Availability (marked "class away") and can be booked, without touching the weekly timetable. Releasing can be done for one section or a whole department, for a date range and a range of periods. "Restore class" undoes it.
 
 Stack: static front end (`public/`) + serverless API (`api/`, `netlify/functions/`) + Neon Postgres. Host on Vercel **or** Netlify; code on GitHub.

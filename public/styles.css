@@ -190,3 +190,9 @@ body{margin:0}
 
 .cell.free.rel{border-style:solid;border-color:var(--free);background:var(--free-bg);flex-direction:column;gap:1px}
 .cell.free.rel em{font-style:normal;font-size:10px;opacity:.85}
+
+.cell.brk{display:flex;align-items:center;justify-content:center;background:repeating-linear-gradient(135deg,var(--line) 0 6px,transparent 6px 12px);color:var(--muted);font-size:12px;border:1px solid var(--line);cursor:default}
+.chk{display:flex;gap:8px;align-items:center;font-size:14px}
+.chk input{width:auto}
+fieldset.days{border:1px solid var(--line);border-radius:6px;display:flex;flex-wrap:wrap;gap:6px 16px;padding:8px 12px;margin:0}
+fieldset.days legend{font-size:13px;color:var(--muted);padding:0 4px}

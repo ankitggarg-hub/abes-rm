@@ -58,3 +58,30 @@ test('restoring a class, and admin or head of institute can release too', async 
   assert.equal((await put(head, 'releases', { upsert: [{ id: 'rh', ttId: t.id, date: nextWeekday(t.day), reason: 'Holiday', by: 'x' }], remove: [] })).status, 200);
   assert.equal((await put(admin, 'releases', { upsert: [], remove: ['rh'] })).status, 200);
 });
+
+test('lunch breaks hold nothing, and faculty is optional', async () => {
+  const d = (await app.call('GET', '/api/data', { cookie: admin })).body.data;
+  const lunch = d.slots.find((s) => s.isBreak);
+  assert.ok(lunch, 'demo data has a lunch break');
+  const t = cseEntry();
+  const free = d.resources.find((r) => r.id === t.resId);
+  // a class in the break is refused
+  const bad = await put(hod, 'tt', { upsert: [{ id: 'tbrk', resId: free.id, day: 5, slotId: lunch.id, title: 'X', faculty: '', classId: t.classId }], remove: [] });
+  assert.equal(bad.status, 400);
+  assert.match(bad.body.error, /break/);
+  // an event over the break is refused
+  const ev = await put(stake, 'events', { upsert: [{ id: 'ebrk', resId: 'r14', date: '2026-10-31', slotIds: [lunch.id], title: 'Lunch', by: 'Anita Desai (Training & Placement)', attendees: 5, status: 'pending' }], remove: [] });
+  assert.equal(ev.status, 400);
+  // a break cannot be created over a used period
+  const used = await put(admin, 'slots', { upsert: [{ id: 's1', label: 'P1', start: '09:00', end: '10:00', isBreak: true }], remove: [] });
+  assert.equal(used.status, 409);
+  // classes without a faculty name can share a period (no clash check on empty names)
+  const used2 = new Set(d.tt.map((x) => `${x.day}-${x.slotId}`));
+  const venues = d.resources.filter((r) => r.deptId === free.deptId);
+  const classes = d.classes.filter((c) => c.deptId === free.deptId);
+  const slot = d.slots.filter((s) => !s.isBreak).find((s) => [0, 1, 2, 3, 4, 5].some((day) => !used2.has(`${day}-${s.id}`)));
+  const day = [0, 1, 2, 3, 4, 5].find((x) => !used2.has(`${x}-${slot.id}`));
+  const rows = [0, 1].map((i) => ({ id: 'nf' + i, resId: venues[i].id, day, slotId: slot.id, title: 'Open session', faculty: '', classId: classes[i].id }));
+  const ok = await put(hod, 'tt', { upsert: rows, remove: [] });
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+});
