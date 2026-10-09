@@ -314,7 +314,7 @@ function vTimetable(){
   if(!rs.length)return head+emptyBox(esc(d.code)+' has no venues yet. The administrator can allocate lecture theatres and labs in Masters → Allocation.');
   if(!ui.ttRes||rs.every(function(r){return r.id!==ui.ttRes}))ui.ttRes=rs[0].id;
   if(!sl.length)return head+emptyBox('No time slots are defined yet.');
-  var modes='<div class="seg"><button class="btn sm'+(ui.ttMode==='week'?' on':'')+'" data-act="mode" data-v="week">Weekly, one venue</button><button class="btn sm'+(ui.ttMode==='day'?' on':'')+'" data-act="mode" data-v="day">Daily, all venues</button></div> <button class="btn primary sm" data-act="fullday">Allot a full day</button>';
+  var modes='<div class="seg"><button class="btn sm'+(ui.ttMode==='week'?' on':'')+'" data-act="mode" data-v="week">Weekly, one venue</button><button class="btn sm'+(ui.ttMode==='day'?' on':'')+'" data-act="mode" data-v="day">Daily, all venues</button></div> <button class="btn primary sm" data-act="fullday">Allot a full day</button> '+(u.role==='admin'?'<button class="btn sm" data-act="addbreak">'+(S.slots.some(function(x){return x.isBreak})?'Edit lunch break':'Add lunch break')+'</button>':'');
   var nb=sl.filter(function(x){return !x.isBreak}).length;
   var grid='',summary='';
   var mk=function(r,day,s){
@@ -337,6 +337,7 @@ function vTimetable(){
       sl.map(function(s){return '<tr>'+tm(s)+rs.map(function(x){return mk(x,ui.ttDay,s)}).join('')+'</tr>'}).join('')+'</tbody></table></div>';
     summary=DAYF[ui.ttDay]+' · '+used2+' of '+(rs.length*nb)+' venue-periods scheduled';
   }
+  if(u.role!=='admin'&&!S.slots.some(function(x){return x.isBreak}))head+='<p class="note">No lunch break is set. The administrator can add one from the Timetables page.</p>';
   return head+'<div class="filters" style="justify-content:space-between;align-items:center">'+modes+'<span class="note">'+summary+'</span></div>'+grid;
 }
 
@@ -709,6 +710,7 @@ document.addEventListener('click',function(e){
     case 'togglePast':ui.evShowPast=!ui.evShowPast;break;
     case 'add':open(d.t,{});return;
     case 'edit':{var src={dept:S.depts,class:S.classes,slot:S.slots,resource:S.resources,user:S.users,building:S.buildings,floor:S.floors}[d.t].filter(function(x){return x.id===d.id})[0];open(d.t,Object.assign({},src));return}
+    case 'addbreak':{var eb=S.slots.filter(function(x){return x.isBreak})[0];open('slot',eb?Object.assign({},eb):{label:'Lunch',start:'13:15',end:'14:00',isBreak:true});return}
     case 'fullday':{var fl=slotOpts();open('fullday',{resId:ui.ttMode==='week'?ui.ttRes:'',days:[ui.ttDay],from:fl.length?fl[0][0]:'',to:fl.length?fl[fl.length-1][0]:'',title:'',faculty:'',classId:ui.lastClass||''});return}
     case 'book':openBook(d.res,d.from,d.to);return;
     case 'ttcell':{var ex=d.id?S.tt.filter(function(t){return t.id===d.id})[0]:null;open('tt',ex?Object.assign({},ex,{mvDay:ex.day,mvSlot:ex.slotId,moveTo:ex.resId}):{resId:d.res,day:+d.day,slotId:d.slot,title:'',faculty:'',classId:''});return}
