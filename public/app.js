@@ -101,7 +101,7 @@ function updateSync(){var el=document.getElementById('sync');if(el)el.innerHTML=
 
 var today=iso(new Date());
 var ui={booting:true,loginErr:'',loginBusy:false,userId:null,tab:'overview',mtab:'depts',ttDept:null,ttRes:null,ttMode:'week',ttDay:0,
-  avDate:today,avFrom:null,avTo:null,avType:'',avCap:'',chDept:null,chClass:'',chFrom:today,chTo:today,chSlotA:'',chSlotB:'',chReason:'Industrial visit',chNote:'',modal:null,confirm:null,evShowPast:false};
+  avDate:today,avFrom:null,avTo:null,avType:'',avCap:'',avBld:'',avFl:'',mf:{},chDept:null,chClass:'',chFrom:today,chTo:today,chSlotA:'',chSlotB:'',chReason:'Industrial visit',chNote:'',modal:null,confirm:null,evShowPast:false};
 
 /* ---------- selectors ---------- */
 var slotList=function(){return S.slots.slice().sort(function(a,b){return a.start.localeCompare(b.start)})};
@@ -190,7 +190,7 @@ function vOverview(){
   else if(cur){
     freeHtml='<p class="note" style="margin:0 0 8px">'+esc(cur.label)+' is running now ('+cur.start+'–'+cur.end+'). '+freeNow.length+' of '+S.resources.length+' venues are free.</p>'+
       (dow(today)===0?'<p class="note">Sunday: no classes are scheduled.</p>':'')+
-      '<div class="chips">'+freeNow.slice(0,16).map(function(r){return '<span class="chip">'+esc(r.name)+'</span>'}).join('')+(freeNow.length>16?'<span class="note">+'+(freeNow.length-16)+' more</span>':'')+'</div>';
+      '<div class="chips">'+freeNow.slice(0,16).map(function(r){return '<span class="chip">'+esc(r.name)+'</span>'}).join('')+(freeNow.length>16?'<button class="link" data-act="seefree" data-slot="'+cur.id+'">+'+(freeNow.length-16)+' more</button>':'')+'</div><p style="margin:10px 0 0"><button class="link" data-act="seefree" data-slot="'+cur.id+'">Filter by building, floor or type in Availability →</button></p>';
   } else if(next){freeHtml='<p class="note">No period is running. The next one, '+esc(next.label)+', starts at '+next.start+'. Open Availability to plan ahead.</p>'}
   else {freeHtml='<p class="note">Today\'s periods are over. Open Availability to check tomorrow.</p>'}
   return '<div class="head"><div><h2>Good to see you, '+esc(u.name.split(' (')[0])+'</h2><p>'+({admin:'Set up masters, allocate venues to departments and keep an eye on usage.',hod:'Plan your department’s daily and weekly timetable on the venues allocated to you.',head:'See which halls, labs and theatres are free and approve event requests.',stakeholder:'Find a free venue for your event and send a booking request.'})[u.role]+'</p></div></div>'+
@@ -255,7 +255,7 @@ function vAvail(){
   if(!sl.length)return emptyBox('No time slots are defined yet. Ask the administrator to add them in Masters.');
   var win=slotRange(ui.avFrom,ui.avTo).map(function(s){return s.id});
   var cap=+ui.avCap||0;
-  var rs=S.resources.filter(function(r){return (!ui.avType||r.type===ui.avType)&&r.capacity>=cap}).sort(function(a,b){return TYPES.indexOf(a.type)-TYPES.indexOf(b.type)||a.capacity-b.capacity});
+  var rs=S.resources.filter(function(r){return (!ui.avType||r.type===ui.avType)&&(!ui.avBld||r.buildingId===ui.avBld)&&(!ui.avFl||r.floorId===ui.avFl)&&r.capacity>=cap}).sort(function(a,b){return TYPES.indexOf(a.type)-TYPES.indexOf(b.type)||a.capacity-b.capacity});
   var free=rs.filter(function(r){return win.every(function(id){return !busyAt(r.id,date,id)})});
   var first=slotById(win[0]),last=slotById(win[win.length-1]);
   var filters='<div class="panel"><div class="filters">'+
@@ -264,6 +264,8 @@ function vAvail(){
     '<label>From<select id="av-from" data-set="avFrom">'+slotOpts().map(function(o){return '<option value="'+o[0]+'"'+(o[0]===ui.avFrom?' selected':'')+'>'+esc(o[1])+'</option>'}).join('')+'</select></label>'+
     '<label>To<select id="av-to" data-set="avTo">'+slotOpts().map(function(o){return '<option value="'+o[0]+'"'+(o[0]===ui.avTo?' selected':'')+'>'+esc(o[1])+'</option>'}).join('')+'</select></label>'+
     '<label>Venue type<select id="av-type" data-set="avType"><option value="">All types</option>'+TYPES.map(function(t){return '<option'+(t===ui.avType?' selected':'')+'>'+t+'</option>'}).join('')+'</select></label>'+
+    '<label>Building<select id="av-bld" data-set="avBld"><option value="">All buildings</option>'+bldOpts().map(function(o){return '<option value="'+o[0]+'"'+(o[0]===ui.avBld?' selected':'')+'>'+esc(o[1])+'</option>'}).join('')+'</select></label>'+
+    '<label>Floor<select id="av-fl" data-set="avFl"><option value="">All floors</option>'+floorOpts().map(function(o){return '<option value="'+o[0]+'"'+(o[0]===ui.avFl?' selected':'')+'>'+esc(o[1])+'</option>'}).join('')+'</select></label>'+
     '<label>Seats needed<input type="number" id="av-cap" min="0" step="10" placeholder="Any" value="'+esc(ui.avCap)+'" data-set="avCap" style="width:110px"></label>'+
     '</div></div>';
   var cards=free.length?'<div class="cards">'+free.map(function(r){
@@ -338,22 +340,47 @@ function vTimetable(){
   return head+'<div class="filters" style="justify-content:space-between;align-items:center">'+modes+'<span class="note">'+summary+'</span></div>'+grid;
 }
 
+/* ---------- list filters ---------- */
+function mfv(t,f){return ui.mf[t+'.'+f]||''}
+var hit=function(q,arr){q=(q||'').trim().toLowerCase();return !q||arr.join(' ').toLowerCase().indexOf(q)>-1};
+var mfTxt=function(t,label,ph){return '<label class="fld"><span>'+label+'</span><input type="search" id="mf-'+t+'-q" data-mf="'+t+'.q" value="'+esc(mfv(t,'q'))+'" placeholder="'+esc(ph||'Type to filter')+'" autocomplete="off"></label>'};
+var mfSel=function(t,f,label,opts){return '<label class="fld"><span>'+label+'</span><select id="mf-'+t+'-'+f+'" data-mf="'+t+'.'+f+'">'+[['','All']].concat(opts).map(function(o){return '<option value="'+esc(o[0])+'"'+(String(o[0])===mfv(t,f)?' selected':'')+'>'+esc(o[1])+'</option>'}).join('')+'</select></label>'};
+function mfBar(t,parts,shown,total){
+  var on=Object.keys(ui.mf).some(function(k){return k.indexOf(t+'.')===0&&ui.mf[k]});
+  return '<div class="panel mfbar"><div class="filters">'+parts.join('')+(on?'<button class="btn sm" data-act="mfclear" data-t="'+t+'">Clear filters</button>':'')+'<span class="note">'+shown+' of '+total+' shown</span></div></div>';
+}
+var bldOpts=function(){return S.buildings.slice().sort(function(a,b){return a.name.localeCompare(b.name)}).map(function(b){return [b.id,b.name]})};
+var floorOpts=function(){return floorList().map(function(f){return [f.id,f.name]})};
+var allocOpts=function(){return [['none','Central pool (unallocated)']].concat(S.depts.map(function(d){return [d.id,d.code+' – '+d.name]}))};
+function resFilter(t){
+  return S.resources.filter(function(r){
+    var b=bldById(r.buildingId),f=floorById(r.floorId);
+    return hit(mfv(t,'q'),[r.name,r.equipment||'',r.type,b?b.name:'',f?f.name:''])&&(!mfv(t,'type')||r.type===mfv(t,'type'))&&(!mfv(t,'bld')||r.buildingId===mfv(t,'bld'))&&(!mfv(t,'fl')||r.floorId===mfv(t,'fl'))&&(!mfv(t,'dept')||(mfv(t,'dept')==='none'?!r.deptId:r.deptId===mfv(t,'dept')));
+  });
+}
+function resBar(t,L){return mfBar(t,[mfTxt(t,'Search','Name, equipment, building'),mfSel(t,'type','Type',TYPES.map(function(x){return [x,x]})),mfSel(t,'bld','Building',bldOpts()),mfSel(t,'fl','Floor',floorOpts()),mfSel(t,'dept','Allocated to',allocOpts())],L.length,S.resources.length)}
+var noMatch=function(total,empty){return total?emptyBox('Nothing matches these filters.'):emptyBox(empty)};
+
 function mDepts(){
-  return '<div class="scroll"><table class="tbl"><thead><tr><th>Code</th><th>Department</th><th>Venues</th><th>Users</th><th></th></tr></thead><tbody>'+
-  S.depts.map(function(d){var k='dept:'+d.id;return '<tr><td>'+dtag(d.id)+'</td><td>'+esc(d.name)+'</td><td class="mono">'+S.resources.filter(function(r){return r.deptId===d.id}).length+'</td><td class="mono">'+S.users.filter(function(x){return x.deptId===d.id}).length+'</td><td class="act"><button class="btn sm" data-act="edit" data-t="dept" data-id="'+d.id+'">Edit</button><button class="btn sm danger" data-act="del" data-k="'+k+'">'+(ui.confirm===k?'Confirm delete':'Delete')+'</button></td></tr>'}).join('')+'</tbody></table></div>'+(S.depts.length?'':emptyBox('No departments yet.'));
+  var L=S.depts.filter(function(d){return hit(mfv('depts','q'),[d.name,d.code])});
+  return mfBar('depts',[mfTxt('depts','Search','Name or code')],L.length,S.depts.length)+'<div class="scroll"><table class="tbl"><thead><tr><th>Code</th><th>Department</th><th>Venues</th><th>Users</th><th></th></tr></thead><tbody>'+
+  L.map(function(d){var k='dept:'+d.id;return '<tr><td>'+dtag(d.id)+'</td><td>'+esc(d.name)+'</td><td class="mono">'+S.resources.filter(function(r){return r.deptId===d.id}).length+'</td><td class="mono">'+S.users.filter(function(x){return x.deptId===d.id}).length+'</td><td class="act"><button class="btn sm" data-act="edit" data-t="dept" data-id="'+d.id+'">Edit</button><button class="btn sm danger" data-act="del" data-k="'+k+'">'+(ui.confirm===k?'Confirm delete':'Delete')+'</button></td></tr>'}).join('')+'</tbody></table></div>'+(L.length?'':noMatch(S.depts.length,'No departments yet.'));
 }
 function mBuildings(){
-  return '<div class="scroll"><table class="tbl"><thead><tr><th>Building</th><th>Venues</th><th></th></tr></thead><tbody>'+
-  S.buildings.map(function(b){var k='bld:'+b.id;return '<tr><td><b>'+esc(b.name)+'</b></td><td class="mono">'+S.resources.filter(function(r){return r.buildingId===b.id}).length+'</td><td class="act"><button class="btn sm" data-act="edit" data-t="building" data-id="'+b.id+'">Edit</button><button class="btn sm danger" data-act="del" data-k="'+k+'">'+(ui.confirm===k?'Confirm delete':'Delete')+'</button></td></tr>'}).join('')+'</tbody></table></div>'+(S.buildings.length?'':emptyBox('No buildings yet. Add one before creating venues.'));
+  var L=S.buildings.filter(function(b){return hit(mfv('bld','q'),[b.name])});
+  return mfBar('bld',[mfTxt('bld','Search','Building name')],L.length,S.buildings.length)+'<div class="scroll"><table class="tbl"><thead><tr><th>Building</th><th>Venues</th><th></th></tr></thead><tbody>'+
+  L.map(function(b){var k='bld:'+b.id;return '<tr><td><b>'+esc(b.name)+'</b></td><td class="mono">'+S.resources.filter(function(r){return r.buildingId===b.id}).length+'</td><td class="act"><button class="btn sm" data-act="edit" data-t="building" data-id="'+b.id+'">Edit</button><button class="btn sm danger" data-act="del" data-k="'+k+'">'+(ui.confirm===k?'Confirm delete':'Delete')+'</button></td></tr>'}).join('')+'</tbody></table></div>'+(L.length?'':noMatch(S.buildings.length,'No buildings yet. Add one before creating venues.'));
 }
 function mFloors(){
-  return '<div class="scroll"><table class="tbl"><thead><tr><th>Floor</th><th>Level</th><th>Venues</th><th></th></tr></thead><tbody>'+
-  floorList().map(function(f){var k='floor:'+f.id;return '<tr><td><b>'+esc(f.name)+'</b></td><td class="mono">'+f.level+'</td><td class="mono">'+S.resources.filter(function(r){return r.floorId===f.id}).length+'</td><td class="act"><button class="btn sm" data-act="edit" data-t="floor" data-id="'+f.id+'">Edit</button><button class="btn sm danger" data-act="del" data-k="'+k+'">'+(ui.confirm===k?'Confirm delete':'Delete')+'</button></td></tr>'}).join('')+'</tbody></table></div>'+(S.floors.length?'':emptyBox('No floors yet. Add one before creating venues.'));
+  var L=floorList().filter(function(f){return hit(mfv('floors','q'),[f.name,String(f.level)])});
+  return mfBar('floors',[mfTxt('floors','Search','Floor name or level')],L.length,S.floors.length)+'<div class="scroll"><table class="tbl"><thead><tr><th>Floor</th><th>Level</th><th>Venues</th><th></th></tr></thead><tbody>'+
+  L.map(function(f){var k='floor:'+f.id;return '<tr><td><b>'+esc(f.name)+'</b></td><td class="mono">'+f.level+'</td><td class="mono">'+S.resources.filter(function(r){return r.floorId===f.id}).length+'</td><td class="act"><button class="btn sm" data-act="edit" data-t="floor" data-id="'+f.id+'">Edit</button><button class="btn sm danger" data-act="del" data-k="'+k+'">'+(ui.confirm===k?'Confirm delete':'Delete')+'</button></td></tr>'}).join('')+'</tbody></table></div>'+(L.length?'':noMatch(S.floors.length,'No floors yet. Add one before creating venues.'));
 }
 function mClasses(){
   var rows=S.classes.slice().sort(function(a,b){return ((deptById(a.deptId)||{}).code||'').localeCompare((deptById(b.deptId)||{}).code||'')||a.year-b.year||a.section.localeCompare(b.section)});
-  return '<div class="scroll"><table class="tbl"><thead><tr><th>Department</th><th>Year</th><th>Section</th><th>Label</th><th>Students</th><th>Periods / week</th><th></th></tr></thead><tbody>'+
-  rows.map(function(c){var k='cls:'+c.id;return '<tr><td>'+dtag(c.deptId)+'</td><td class="mono">Year '+c.year+'</td><td class="mono">'+esc(c.section)+'</td><td><b>'+esc(classLabel(c.id))+'</b></td><td class="mono">'+(c.strength||'–')+'</td><td class="mono">'+S.tt.filter(function(t){return t.classId===c.id}).length+'</td><td class="act"><button class="btn sm" data-act="edit" data-t="class" data-id="'+c.id+'">Edit</button><button class="btn sm danger" data-act="del" data-k="'+k+'">'+(ui.confirm===k?'Confirm delete':'Delete')+'</button></td></tr>'}).join('')+'</tbody></table></div>'+(rows.length?'':emptyBox('No years or sections yet. Add them so department heads can pick them in the timetable.'));
+  rows=rows.filter(function(c){return hit(mfv('classes','q'),[classLabel(c.id),c.section])&&(!mfv('classes','dept')||c.deptId===mfv('classes','dept'))&&(!mfv('classes','year')||String(c.year)===mfv('classes','year'))});
+  return mfBar('classes',[mfTxt('classes','Search','e.g. CSE 3A'),mfSel('classes','dept','Department',S.depts.map(function(d){return [d.id,d.code+' – '+d.name]})),mfSel('classes','year','Year',[1,2,3,4,5,6].map(function(y){return [String(y),'Year '+y]}))],rows.length,S.classes.length)+'<div class="scroll"><table class="tbl"><thead><tr><th>Department</th><th>Year</th><th>Section</th><th>Label</th><th>Students</th><th>Periods / week</th><th></th></tr></thead><tbody>'+
+  rows.map(function(c){var k='cls:'+c.id;return '<tr><td>'+dtag(c.deptId)+'</td><td class="mono">Year '+c.year+'</td><td class="mono">'+esc(c.section)+'</td><td><b>'+esc(classLabel(c.id))+'</b></td><td class="mono">'+(c.strength||'–')+'</td><td class="mono">'+S.tt.filter(function(t){return t.classId===c.id}).length+'</td><td class="act"><button class="btn sm" data-act="edit" data-t="class" data-id="'+c.id+'">Edit</button><button class="btn sm danger" data-act="del" data-k="'+k+'">'+(ui.confirm===k?'Confirm delete':'Delete')+'</button></td></tr>'}).join('')+'</tbody></table></div>'+(rows.length?'':noMatch(S.classes.length,'No years or sections yet. Add them so department heads can pick them in the timetable.'));
 }
 function vClasses(){
   var u=me(),head='<div class="head"><div><h2>Rooms by year and section</h2><p>See which classrooms and labs each year and section uses, and its full week.</p></div>';
@@ -379,22 +406,26 @@ function vClasses(){
     '<section><h3 style="margin-bottom:10px">Week of '+esc(classFull(c))+'</h3>'+grid+'</section>';
 }
 function mSlots(){
-  return '<div class="scroll"><table class="tbl"><thead><tr><th>Label</th><th>Start</th><th>End</th><th>Minutes</th><th></th></tr></thead><tbody>'+
-  slotList().map(function(s){var k='slot:'+s.id;return '<tr><td><b>'+esc(s.label)+'</b>'+(s.isBreak?' <span class="badge b-wait">Break</span>':'')+'</td><td class="mono">'+s.start+'</td><td class="mono">'+s.end+'</td><td class="mono">'+(toMin(s.end)-toMin(s.start))+'</td><td class="act"><button class="btn sm" data-act="edit" data-t="slot" data-id="'+s.id+'">Edit</button><button class="btn sm danger" data-act="del" data-k="'+k+'">'+(ui.confirm===k?'Confirm delete':'Delete')+'</button></td></tr>'}).join('')+'</tbody></table></div>'+(S.slots.length?'':emptyBox('No time slots yet.'));
+  var L=slotList().filter(function(x){return hit(mfv('slots','q'),[x.label,x.start,x.end])&&(!mfv('slots','kind')||(mfv('slots','kind')==='break'?x.isBreak:!x.isBreak))});
+  return mfBar('slots',[mfTxt('slots','Search','Label or time'),mfSel('slots','kind','Kind',[['period','Periods'],['break','Breaks']])],L.length,S.slots.length)+'<div class="scroll"><table class="tbl"><thead><tr><th>Label</th><th>Start</th><th>End</th><th>Minutes</th><th></th></tr></thead><tbody>'+
+  L.map(function(s){var k='slot:'+s.id;return '<tr><td><b>'+esc(s.label)+'</b>'+(s.isBreak?' <span class="badge b-wait">Break</span>':'')+'</td><td class="mono">'+s.start+'</td><td class="mono">'+s.end+'</td><td class="mono">'+(toMin(s.end)-toMin(s.start))+'</td><td class="act"><button class="btn sm" data-act="edit" data-t="slot" data-id="'+s.id+'">Edit</button><button class="btn sm danger" data-act="del" data-k="'+k+'">'+(ui.confirm===k?'Confirm delete':'Delete')+'</button></td></tr>'}).join('')+'</tbody></table></div>'+(L.length?'':noMatch(S.slots.length,'No time slots yet.'));
 }
 function mRes(){
-  return '<div class="scroll"><table class="tbl"><thead><tr><th>Venue</th><th>Type</th><th>Building</th><th>Floor</th><th>Seats</th><th>Equipment</th><th>Allocated to</th><th></th></tr></thead><tbody>'+
-  S.resources.map(function(r){var k='res:'+r.id;return '<tr><td><b>'+esc(r.name)+'</b></td><td>'+tcode(r.type)+esc(r.type)+'</td><td>'+esc((bldById(r.buildingId)||{}).name||'–')+'</td><td>'+esc((floorById(r.floorId)||{}).name||'–')+'</td><td class="mono">'+r.capacity+'</td><td>'+esc(r.equipment)+'</td><td>'+dtag(r.deptId)+'</td><td class="act"><button class="btn sm" data-act="edit" data-t="resource" data-id="'+r.id+'">Edit</button><button class="btn sm danger" data-act="del" data-k="'+k+'">'+(ui.confirm===k?'Confirm delete':'Delete')+'</button></td></tr>'}).join('')+'</tbody></table></div>'+(S.resources.length?'':emptyBox('No venues yet.'));
+  var L=resFilter('res');
+  return resBar('res',L)+'<div class="scroll"><table class="tbl"><thead><tr><th>Venue</th><th>Type</th><th>Building</th><th>Floor</th><th>Seats</th><th>Equipment</th><th>Allocated to</th><th></th></tr></thead><tbody>'+
+  L.map(function(r){var k='res:'+r.id;return '<tr><td><b>'+esc(r.name)+'</b></td><td>'+tcode(r.type)+esc(r.type)+'</td><td>'+esc((bldById(r.buildingId)||{}).name||'–')+'</td><td>'+esc((floorById(r.floorId)||{}).name||'–')+'</td><td class="mono">'+r.capacity+'</td><td>'+esc(r.equipment)+'</td><td>'+dtag(r.deptId)+'</td><td class="act"><button class="btn sm" data-act="edit" data-t="resource" data-id="'+r.id+'">Edit</button><button class="btn sm danger" data-act="del" data-k="'+k+'">'+(ui.confirm===k?'Confirm delete':'Delete')+'</button></td></tr>'}).join('')+'</tbody></table></div>'+(L.length?'':noMatch(S.resources.length,'No venues yet.'));
 }
 function mUsers(){
-  return '<div class="scroll"><table class="tbl"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Department</th><th></th></tr></thead><tbody>'+
-  S.users.map(function(u){var k='user:'+u.id;return '<tr><td><b>'+esc(u.name)+'</b></td><td>'+esc(u.email)+'</td><td>'+ROLE[u.role]+'</td><td>'+(u.deptId?dtag(u.deptId):'<span class="muted">–</span>')+'</td><td class="act"><button class="btn sm" data-act="edit" data-t="user" data-id="'+u.id+'">Edit</button><button class="btn sm danger" data-act="del" data-k="'+k+'">'+(ui.confirm===k?'Confirm delete':'Delete')+'</button></td></tr>'}).join('')+'</tbody></table></div>';
+  var L=S.users.filter(function(u){return hit(mfv('users','q'),[u.name,u.email||''])&&(!mfv('users','role')||u.role===mfv('users','role'))&&(!mfv('users','dept')||(mfv('users','dept')==='none'?!u.deptId:u.deptId===mfv('users','dept')))});
+  return mfBar('users',[mfTxt('users','Search','Name or email'),mfSel('users','role','Role',Object.keys(ROLE).map(function(k){return [k,ROLE[k]]})),mfSel('users','dept','Department',[['none','No department']].concat(S.depts.map(function(d){return [d.id,d.code+' – '+d.name]})))],L.length,S.users.length)+'<div class="scroll"><table class="tbl"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Department</th><th></th></tr></thead><tbody>'+
+  L.map(function(u){var k='user:'+u.id;return '<tr><td><b>'+esc(u.name)+'</b></td><td>'+esc(u.email)+'</td><td>'+ROLE[u.role]+'</td><td>'+(u.deptId?dtag(u.deptId):'<span class="muted">–</span>')+'</td><td class="act"><button class="btn sm" data-act="edit" data-t="user" data-id="'+u.id+'">Edit</button><button class="btn sm danger" data-act="del" data-k="'+k+'">'+(ui.confirm===k?'Confirm delete':'Delete')+'</button></td></tr>'}).join('')+'</tbody></table></div>'+(L.length?'':noMatch(S.users.length,'No users yet.'));
 }
 function mAlloc(){
   var chips=S.depts.map(function(d){return '<span>'+dtag(d.id)+' <b class="mono">'+S.resources.filter(function(r){return r.deptId===d.id}).length+'</b></span>'}).join(' ')+' <span><span class="dtag central">Central pool</span> <b class="mono">'+S.resources.filter(function(r){return !r.deptId}).length+'</b></span>';
-  return '<p class="note" style="margin:0">A venue allocated to a department can be timetabled by that department head. Central pool venues have no timetable and stay open for events.</p><div class="chips" style="gap:14px">'+chips+'</div>'+
+  var L=resFilter('alloc');
+  return resBar('alloc',L)+'<p class="note" style="margin:0">A venue allocated to a department can be timetabled by that department head. Central pool venues have no timetable and stay open for events.</p><div class="chips" style="gap:14px">'+chips+'</div>'+
   '<div class="scroll"><table class="tbl"><thead><tr><th>Venue</th><th>Type</th><th>Seats</th><th>Classes per week</th><th>Allocated to</th></tr></thead><tbody>'+
-  S.resources.map(function(r){return '<tr><td><b>'+esc(r.name)+'</b></td><td>'+tcode(r.type)+esc(r.type)+'</td><td class="mono">'+r.capacity+'</td><td class="mono">'+S.tt.filter(function(t){return t.resId===r.id}).length+'</td><td><select id="alloc-'+r.id+'" data-alloc="'+r.id+'" aria-label="Allocate '+esc(r.name)+'">'+deptOpts('Central pool (no department)').map(function(o){return '<option value="'+o[0]+'"'+(o[0]===(r.deptId||'')?' selected':'')+'>'+esc(o[1])+'</option>'}).join('')+'</select></td></tr>'}).join('')+'</tbody></table></div>';
+  L.map(function(r){return '<tr><td><b>'+esc(r.name)+'</b></td><td>'+tcode(r.type)+esc(r.type)+'</td><td class="mono">'+r.capacity+'</td><td class="mono">'+S.tt.filter(function(t){return t.resId===r.id}).length+'</td><td><select id="alloc-'+r.id+'" data-alloc="'+r.id+'" aria-label="Allocate '+esc(r.name)+'">'+deptOpts('Central pool (no department)').map(function(o){return '<option value="'+o[0]+'"'+(o[0]===(r.deptId||'')?' selected':'')+'>'+esc(o[1])+'</option>'}).join('')+'</select></td></tr>'}).join('')+'</tbody></table></div>'+(L.length?'':noMatch(S.resources.length,'No venues yet.'));
 }
 function vMasters(){
   var subs=[['depts','Departments'],['classes','Years & sections'],['slots','Time slots'],['bld','Buildings'],['floors','Floors'],['res','Venues'],['users','Users'],['alloc','Allocation']];
@@ -667,6 +698,8 @@ document.addEventListener('click',function(e){
     case 'logout':api('POST','/api/auth/logout').catch(function(){}).then(function(){signedOut()});return;
     case 'syncnow':save();break;
     case 'tab':ui.tab=d.v;break;
+    case 'mfclear':Object.keys(ui.mf).forEach(function(k){if(k.indexOf(d.t+'.')===0)delete ui.mf[k]});break;
+    case 'seefree':ui.avDate=today;ui.avFrom=d.slot;ui.avTo=d.slot;ui.avType='';ui.avBld='';ui.avFl='';ui.avCap='';ui.tab='avail';window.scrollTo(0,0);break;
     case 'mtab':ui.mtab=d.v;break;
     case 'mode':ui.ttMode=d.v;break;
     case 'clsel':ui.clId=d.v;break;
@@ -689,6 +722,7 @@ document.addEventListener('click',function(e){
   render();
 });
 document.addEventListener('change',function(e){
+  var mfs=e.target.closest('select[data-mf]');if(mfs){ui.mf[mfs.dataset.mf]=mfs.value;render();return}
   var mv=e.target.closest('[data-mv]');
   if(mv&&ui.modal){var fm=mv.closest('form'),fd={};new FormData(fm).forEach(function(val,key){fd[key]=val});fd.mvDay=+fd.mvDay;fd.moveTo=fd.moveTo||'';ui.modal.vals=Object.assign({},ui.modal.vals,fd);ui.modal.err='';ui.modal.focused=true;render();return}
   var al=e.target.closest('[data-alloc]');
@@ -731,12 +765,17 @@ document.addEventListener('submit',function(e){
   var fd={};new FormData(f).forEach(function(val,key){fd[key]=(key in fd)?[].concat(fd[key],val):val});
   submitForm(ui.modal.type,fd);
 });
+document.addEventListener('input',function(e){
+  var t=e.target.closest('input[data-mf]');if(!t)return;
+  ui.mf[t.dataset.mf]=t.value;var id=t.id,pos=t.selectionStart;render();
+  var n=document.getElementById(id);if(n){n.focus();try{n.setSelectionRange(pos,pos)}catch(x){}}
+});
 document.addEventListener('keydown',function(e){if(e.key==='Escape'&&ui.modal){ui.modal=null;render()}});
 
 render();
 boot();
 setInterval(function(){
-  if(!ui.userId||ui.modal||document.hidden||sync.state==='saving'||sync.state==='loading'||sync.state==='error'||pendingOps().length)return;
+  if(!ui.userId||ui.modal||document.hidden||(document.activeElement&&document.activeElement.matches&&document.activeElement.matches('[data-mf]'))||sync.state==='saving'||sync.state==='loading'||sync.state==='error'||pendingOps().length)return;
   loadAll(true).catch(function(err){if(err.status===401)signedOut('Your session has ended. Please sign in again.')});
 },45000);
 })();

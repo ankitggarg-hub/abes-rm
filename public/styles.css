@@ -196,3 +196,9 @@ body{margin:0}
 .chk input{width:auto}
 fieldset.days{border:1px solid var(--line);border-radius:6px;display:flex;flex-wrap:wrap;gap:6px 16px;padding:8px 12px;margin:0}
 fieldset.days legend{font-size:13px;color:var(--muted);padding:0 4px}
+
+.link{background:none;border:0;padding:0;margin:0 0 0 6px;color:var(--accent);font:inherit;font-size:13px;font-weight:600;text-decoration:underline;cursor:pointer}
+.link:hover{text-decoration:none}
+.mfbar{padding:12px 14px;margin:12px 0}
+.mfbar .fld span{font-size:12px}
+.mfbar input[type=search]{min-width:200px}
