@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS slots (
 );
 ALTER TABLE slots ADD COLUMN IF NOT EXISTS is_break boolean NOT NULL DEFAULT false;
 
+ALTER TABLE departments ADD COLUMN IF NOT EXISTS lunch_slots jsonb NOT NULL DEFAULT '[]'::jsonb;
+
 CREATE TABLE IF NOT EXISTS buildings (
   id   text PRIMARY KEY,
   name text NOT NULL UNIQUE

@@ -85,3 +85,26 @@ test('lunch breaks hold nothing, and faculty is optional', async () => {
   const ok = await put(hod, 'tt', { upsert: rows, remove: [] });
   assert.equal(ok.status, 200, JSON.stringify(ok.body));
 });
+
+test('each department has its own lunch periods', async () => {
+  const d = (await app.call('GET', '/api/data', { cookie: admin })).body.data;
+  const cse = d.depts.find((x) => x.code === 'CSE');
+  const ece = d.depts.find((x) => x.code === 'ECE');
+  const used = new Set(d.tt.filter((t) => d.classes.find((c) => c.id === t.classId).deptId === cse.id).map((t) => t.slotId));
+  const free = d.slots.find((s) => !s.isBreak && !used.has(s.id));
+  // a period that CSE already uses cannot become its lunch
+  const used1 = [...used][0];
+  assert.equal((await put(admin, 'depts', { upsert: [{ ...cse, lunchSlots: [used1] }], remove: [] })).status, 409);
+  // the head of CSE sets lunch for CSE only
+  const ok = await put(hod, 'depts', { upsert: [{ ...cse, lunchSlots: [free.id] }], remove: [] });
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  assert.equal((await put(hod, 'depts', { upsert: [{ ...ece, lunchSlots: [free.id] }], remove: [] })).status, 403);
+  assert.equal((await put(hod, 'depts', { upsert: [{ ...cse, name: 'Renamed', lunchSlots: [free.id] }], remove: [] })).status, 403);
+  // classes of CSE are refused in that period, other departments are not
+  const cseClass = d.classes.find((c) => c.deptId === cse.id);
+  const cseVenue = d.resources.find((r) => r.deptId === cse.id);
+  const day = [0, 1, 2, 3, 4, 5].find((x) => !d.tt.some((t) => t.day === x && t.slotId === free.id && (t.resId === cseVenue.id || t.classId === cseClass.id)));
+  const bad = await put(hod, 'tt', { upsert: [{ id: 'tl1', resId: cseVenue.id, day, slotId: free.id, title: 'X', faculty: '', classId: cseClass.id }], remove: [] });
+  assert.equal(bad.status, 400);
+  assert.match(bad.body.error, /lunch break of CSE/);
+});

@@ -117,6 +117,8 @@ function classFull(c){var d=deptById(c.deptId);return (d?d.code:'?')+' · Year '
 function classesOf(deptId){return S.classes.filter(function(c){return c.deptId===deptId}).sort(function(a,b){return a.year-b.year||a.section.localeCompare(b.section)})}
 var resById=function(id){return S.resources.filter(function(r){return r.id===id})[0]};
 var deptById=function(id){return S.depts.filter(function(d){return d.id===id})[0]};
+var isLunch=function(deptId,slotId){var d=S.depts.filter(function(x){return x.id===deptId})[0];return !!(d&&d.lunchSlots&&d.lunchSlots.indexOf(slotId)>-1)};
+var lunchText=function(d){var l=slotList().filter(function(x){return d&&d.lunchSlots&&d.lunchSlots.indexOf(x.id)>-1});return l.length?l.map(function(x){return x.label+' '+x.start+'–'+x.end}).join(', '):''};
 var me=function(){return S.users.filter(function(u){return u.id===ui.userId})[0]||{id:'',name:'',role:'stakeholder',deptId:null,email:''}};
 var canBook=function(){return ['admin','head','stakeholder'].indexOf(me().role)>-1};
 var canApprove=function(){return ['admin','head'].indexOf(me().role)>-1};
@@ -314,11 +316,12 @@ function vTimetable(){
   if(!rs.length)return head+emptyBox(esc(d.code)+' has no venues yet. The administrator can allocate lecture theatres and labs in Masters → Allocation.');
   if(!ui.ttRes||rs.every(function(r){return r.id!==ui.ttRes}))ui.ttRes=rs[0].id;
   if(!sl.length)return head+emptyBox('No time slots are defined yet.');
-  var modes='<div class="seg"><button class="btn sm'+(ui.ttMode==='week'?' on':'')+'" data-act="mode" data-v="week">Weekly, one venue</button><button class="btn sm'+(ui.ttMode==='day'?' on':'')+'" data-act="mode" data-v="day">Daily, all venues</button></div> <button class="btn primary sm" data-act="fullday">Allot a full day</button> '+(u.role==='admin'?'<button class="btn sm" data-act="addbreak">'+(S.slots.some(function(x){return x.isBreak})?'Edit lunch break':'Add lunch break')+'</button>':'');
-  var nb=sl.filter(function(x){return !x.isBreak}).length;
+  var modes='<div class="seg"><button class="btn sm'+(ui.ttMode==='week'?' on':'')+'" data-act="mode" data-v="week">Weekly, one venue</button><button class="btn sm'+(ui.ttMode==='day'?' on':'')+'" data-act="mode" data-v="day">Daily, all venues</button></div> <button class="btn primary sm" data-act="fullday">Allot a full day</button> <button class="btn sm" data-act="lunch" data-id="'+d.id+'">'+(lunchText(d)?'Lunch break for '+esc(d.code)+': '+esc(lunchText(d)):'Set lunch break for '+esc(d.code))+'</button>';
+  var nb=sl.filter(function(x){return !x.isBreak&&!isLunch(d.id,x.id)}).length;
   var grid='',summary='';
   var mk=function(r,day,s){
     if(s.isBreak)return '<td><div class="cell brk">'+esc(s.label)+'</div></td>';
+    if(isLunch(d.id,s.id))return '<td><div class="cell brk">Lunch</div></td>';
     var e=S.tt.filter(function(t){return t.resId===r.id&&t.day===day&&t.slotId===s.id})[0];
     return e?'<td><button class="cell cls edit" style="--h:'+d.h+'" data-act="ttcell" data-id="'+e.id+'" data-res="'+r.id+'" data-day="'+day+'" data-slot="'+s.id+'"><b>'+esc(e.title)+'</b>'+(e.faculty?'<span>'+esc(e.faculty)+'</span>':'')+'<span>'+esc(classLabel(e.classId))+'</span></button></td>'
       :'<td><button class="cell free edit" data-act="ttcell" data-res="'+r.id+'" data-day="'+day+'" data-slot="'+s.id+'" aria-label="Add class '+DAYF[day]+' '+esc(s.label)+'"><i>+ Add</i></button></td>';
@@ -337,7 +340,6 @@ function vTimetable(){
       sl.map(function(s){return '<tr>'+tm(s)+rs.map(function(x){return mk(x,ui.ttDay,s)}).join('')+'</tr>'}).join('')+'</tbody></table></div>';
     summary=DAYF[ui.ttDay]+' · '+used2+' of '+(rs.length*nb)+' venue-periods scheduled';
   }
-  if(u.role!=='admin'&&!S.slots.some(function(x){return x.isBreak}))head+='<p class="note">No lunch break is set. The administrator can add one from the Timetables page.</p>';
   return head+'<div class="filters" style="justify-content:space-between;align-items:center">'+modes+'<span class="note">'+summary+'</span></div>'+grid;
 }
 
@@ -364,8 +366,8 @@ var noMatch=function(total,empty){return total?emptyBox('Nothing matches these f
 
 function mDepts(){
   var L=S.depts.filter(function(d){return hit(mfv('depts','q'),[d.name,d.code])});
-  return mfBar('depts',[mfTxt('depts','Search','Name or code')],L.length,S.depts.length)+'<div class="scroll"><table class="tbl"><thead><tr><th>Code</th><th>Department</th><th>Venues</th><th>Users</th><th></th></tr></thead><tbody>'+
-  L.map(function(d){var k='dept:'+d.id;return '<tr><td>'+dtag(d.id)+'</td><td>'+esc(d.name)+'</td><td class="mono">'+S.resources.filter(function(r){return r.deptId===d.id}).length+'</td><td class="mono">'+S.users.filter(function(x){return x.deptId===d.id}).length+'</td><td class="act"><button class="btn sm" data-act="edit" data-t="dept" data-id="'+d.id+'">Edit</button><button class="btn sm danger" data-act="del" data-k="'+k+'">'+(ui.confirm===k?'Confirm delete':'Delete')+'</button></td></tr>'}).join('')+'</tbody></table></div>'+(L.length?'':noMatch(S.depts.length,'No departments yet.'));
+  return mfBar('depts',[mfTxt('depts','Search','Name or code')],L.length,S.depts.length)+'<div class="scroll"><table class="tbl"><thead><tr><th>Code</th><th>Department</th><th>Venues</th><th>Users</th><th>Lunch break</th><th></th></tr></thead><tbody>'+
+  L.map(function(d){var k='dept:'+d.id;return '<tr><td>'+dtag(d.id)+'</td><td>'+esc(d.name)+'</td><td class="mono">'+S.resources.filter(function(r){return r.deptId===d.id}).length+'</td><td class="mono">'+S.users.filter(function(x){return x.deptId===d.id}).length+'</td><td class="note">'+(lunchText(d)?esc(lunchText(d)):'<span class="muted">Not set</span>')+' <button class="link" data-act="lunch" data-id="'+d.id+'">Set</button></td><td class="act"><button class="btn sm" data-act="edit" data-t="dept" data-id="'+d.id+'">Edit</button><button class="btn sm danger" data-act="del" data-k="'+k+'">'+(ui.confirm===k?'Confirm delete':'Delete')+'</button></td></tr>'}).join('')+'</tbody></table></div>'+(L.length?'':noMatch(S.depts.length,'No departments yet.'));
 }
 function mBuildings(){
   var L=S.buildings.filter(function(b){return hit(mfv('bld','q'),[b.name])});
@@ -400,7 +402,7 @@ function vClasses(){
   var c=classById(ui.clId);
   var grid='<div class="scroll"><table class="grid"><thead><tr><th class="tm">Period</th>'+DAYF.map(function(n){return '<th>'+n+'</th>'}).join('')+'</tr></thead><tbody>'+sl.map(function(s){
     return '<tr><th class="tm">'+esc(s.label)+'<small>'+s.start+'–'+s.end+'</small></th>'+DAYF.map(function(n,i){
-      if(s.isBreak)return '<td><div class="cell brk">Break</div></td>';
+      if(s.isBreak||isLunch(d.id,s.id))return '<td><div class="cell brk">'+(s.isBreak?'Break':'Lunch')+'</div></td>';
       var e=S.tt.filter(function(t){return t.classId===c.id&&t.day===i&&t.slotId===s.id})[0],r=e&&resById(e.resId);
       return '<td>'+(e?'<div class="cell cls" style="--h:'+d.h+'" title="'+esc(r?locStr(r):'')+'"><b>'+esc(e.title)+'</b>'+(e.faculty?'<span>'+esc(e.faculty)+'</span>':'')+'<span>Room: '+esc(r?r.name:'?')+'</span></div>':'<div class="cell free"><i>–</i></div>')+'</td>'}).join('')+'</tr>'}).join('')+'</tbody></table></div>';
   return head+'<div class="scroll"><table class="tbl"><thead><tr><th>Year and section</th><th>Main classroom</th><th>All rooms used (periods per week)</th><th>Periods</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
@@ -477,6 +479,10 @@ function modalHTML(){
     case 'tt':{var r=resById(v.resId),s=slotById(v.slotId);title=(v.id?'Edit':'Add')+' class';
       extra='<p class="ctx"><b>'+esc(r?r.name:'')+'</b> · '+DAYF[v.day]+' · '+(s?esc(s.label)+' '+s.start+'–'+s.end:'')+'</p>';
       body=fld('Subject or session',tin('title',v.title,'required autocomplete="off"'))+'<div class="frow">'+fld('Faculty (optional)',tin('faculty',v.faculty,'autocomplete="off"'))+fld('Year and section',(function(){var dc=r?classesOf(r.deptId):[];return dc.length?sel('classId',[['','Choose year and section']].concat(dc.map(function(c){return [c.id,classFull(c)+(c.strength?' ('+c.strength+' students)':'')]})),v.classId||(!v.id&&dc.some(function(c){return c.id===ui.lastClass})?ui.lastClass:'')):'<span class="err">No years or sections exist for this department. Add them in Masters → Years & sections.</span>'})())+'</div>'+(v.id?moveSection(v)+(v.classId&&me().role!=='stakeholder'?'<p class="note" style="margin:0">Class away on a particular day? <button type="button" class="btn sm" data-act="gochange" data-cls="'+esc(v.classId)+'">Release this class for a date</button></p>':''):'');break}
+    case 'lunch':{var ld=deptById(v.id);title='Lunch break · '+(ld?esc(ld.code):'');
+      extra='<p class="ctx">Tick the period or periods when '+(ld?esc(ld.name):'this department')+' has lunch. Its classes cannot be scheduled then, and its venues show as free for other uses. Other departments are not affected.</p>';
+      var lv=[].concat(v.lunch||[]).map(String);
+      body='<fieldset class="days"><legend>Lunch periods</legend>'+slotOpts().map(function(o){return '<label class="chk"><input type="checkbox" name="lunch" value="'+o[0]+'"'+(lv.indexOf(String(o[0]))>-1?' checked':'')+'> '+esc(o[1])+'</label>'}).join('')+'</fieldset>';break}
     case 'fullday':{title='Allot a full day';
       var fdD=deptById(me().role==='admin'?ui.ttDept:me().deptId),fdRs=S.resources.filter(function(x){return fdD&&x.deptId===fdD.id}),fdCl=fdD?classesOf(fdD.id):[];
       var fdDays=[].concat(v.days||[]).map(String);
@@ -607,6 +613,14 @@ function submitForm(type,d){
     if(v.id){o=S.users.filter(function(x){return x.id===v.id})[0];o.name=v.name;o.email=v.email;o.role=v.role;o.deptId=dp;if(pw)o.password=pw}else{var nu={id:uid('u'),name:v.name,email:v.email,role:v.role,deptId:dp,password:pw};S.users.push(nu)}
     return done('User saved.');
   }
+  if(type==='lunch'){
+    var lids=[].concat(d.lunch||[]),ldp=deptById(v.id);
+    if(!ldp)return fail('Department not found.',d);
+    var clash2=S.tt.filter(function(t){var c=classById(t.classId);return c&&c.deptId===ldp.id&&lids.indexOf(t.slotId)>-1}).length;
+    if(clash2)return fail(ldp.code+' already has '+clash2+' class'+(clash2===1?'':'es')+' in those periods. Remove or move them first.',d);
+    ldp.lunchSlots=lids;
+    return done(lids.length?'Lunch break saved for '+ldp.code+'.':'Lunch break cleared for '+ldp.code+'.');
+  }
   if(type==='fullday'){
     v.title=(v.title||'').trim();v.faculty=(v.faculty||'').trim();
     var days=[].concat(v.days||[]).map(Number).filter(function(x){return x>=0&&x<=5});
@@ -614,7 +628,8 @@ function submitForm(type,d){
     if(!days.length)return fail('Tick at least one day.',d);
     if(!v.classId||!classById(v.classId))return fail('Choose the year and section from the list.',d);
     if(!v.title)return fail('Enter the subject or session.',d);
-    var win=slotRange(v.from,v.to);
+    var cdept=classById(v.classId).deptId;
+    var win=slotRange(v.from,v.to).filter(function(x){return !isLunch(cdept,x.id)});
     if(!win.length)return fail('Choose the periods.',d);
     var added=0,skipped=0;
     days.forEach(function(day){win.forEach(function(sl){
@@ -632,6 +647,7 @@ function submitForm(type,d){
     if(!v.classId||!classById(v.classId))return fail('Choose the year and section from the list.',d);
     var ed=!!v.id,day=ed?+v.mvDay:+v.day,slotId=ed?v.mvSlot:v.slotId,resId=ed?(d.moveTo||''):v.resId;
     if(ed&&!resId)return fail('Choose a venue from the free list.',d);
+    if(isLunch(classById(v.classId).deptId,slotId))return fail('That period is the lunch break of '+deptById(classById(v.classId).deptId).code+'. Choose another period.',d);
     if(S.tt.some(function(t){return t.id!==v.id&&t.resId===resId&&t.day===day&&t.slotId===slotId}))return fail(resById(resId).name+' is not free at that time.',d);
     var others=S.tt.filter(function(t){return t.id!==v.id&&t.day===day&&t.slotId===slotId});
     var fc=v.faculty&&others.filter(function(t){return t.faculty&&t.faculty.toLowerCase()===v.faculty.toLowerCase()})[0];
@@ -710,6 +726,7 @@ document.addEventListener('click',function(e){
     case 'togglePast':ui.evShowPast=!ui.evShowPast;break;
     case 'add':open(d.t,{});return;
     case 'edit':{var src={dept:S.depts,class:S.classes,slot:S.slots,resource:S.resources,user:S.users,building:S.buildings,floor:S.floors}[d.t].filter(function(x){return x.id===d.id})[0];open(d.t,Object.assign({},src));return}
+    case 'lunch':{var ldd=deptById(d.id);if(ldd)open('lunch',{id:ldd.id,lunch:(ldd.lunchSlots||[]).slice()});return}
     case 'addbreak':{var eb=S.slots.filter(function(x){return x.isBreak})[0];open('slot',eb?Object.assign({},eb):{label:'Lunch',start:'13:15',end:'14:00',isBreak:true});return}
     case 'fullday':{var fl=slotOpts();open('fullday',{resId:ui.ttMode==='week'?ui.ttRes:'',days:[ui.ttDay],from:fl.length?fl[0][0]:'',to:fl.length?fl[fl.length-1][0]:'',title:'',faculty:'',classId:ui.lastClass||''});return}
     case 'book':openBook(d.res,d.from,d.to);return;

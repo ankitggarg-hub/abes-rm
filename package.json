@@ -1,8 +1,23 @@
 {
-  "name": "weekly-tracker",
+  "name": "campus-resource-planner",
   "version": "1.0.0",
   "private": true,
+  "description": "Lecture theatre, lab, seminar hall and auditorium management for a college.",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "db:setup": "node scripts/setup-db.js",
+    "db:seed-demo": "node scripts/seed-demo.js",
+    "dev": "node scripts/dev-server.js",
+    "test": "node --test test/api.test.js test/authz.test.js test/releases.test.js"
+  },
   "dependencies": {
-    "@neondatabase/serverless": "^0.10.0"
+    "@neondatabase/serverless": "^1.2.0",
+    "bcryptjs": "^3.0.3",
+    "jose": "^6.2.12",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8"
   }
 }
