@@ -1,23 +1,723 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="color-scheme" content="light dark">
-<meta name="robots" content="noindex">
-<title>Campus Resource Planner</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3E%3Crect x='1' y='1' width='28' height='28' rx='3' fill='none' stroke='%230B5C73' stroke-width='2'/%3E%3Cpath d='M1 10h28M1 20h28M10 1v28M20 1v28' stroke='%230B5C73' stroke-width='1.5'/%3E%3Crect x='11' y='11' width='8' height='8' fill='%230B5C73'/%3E%3C/svg%3E">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
-<link rel="stylesheet" href="/styles.css">
-</head>
-<body>
-<div class="top"><div class="wrap" id="topbar"></div></div>
-<div class="wrap"><main id="main"></main><footer id="foot"></footer></div>
-<div id="modalRoot"></div>
-<div id="toast" class="toast" role="status" aria-live="polite"></div>
-<noscript>This app needs JavaScript.</noscript>
-<script src="/app.js" defer></script>
-</body>
-</html>
+<title>Weekly Academic & Training Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+ --bg:#f4f5f3;--surface:#ffffff;--ink:#161c17;--mut:#5c6b60;--line:#dde3dc;
+ --pri:#2f5d4f;--pri-ink:#1e4237;--pri-tint:#e6efe9;
+ --ok:#1f7a4d;--warn:#9a6a10;--bad:#b3392f;--wbg:#fbf1de;--bbg:#fbe9e6;--gbg:#e6f3ea;
+ --font-ui:'IBM Plex Sans',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;--font-display:'Newsreader',Georgia,serif}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#10140f;--surface:#171d17;--ink:#e8ece7;--mut:#93a294;--line:#2a332a;
+ --pri:#3f8f76;--pri-ink:#2c6b55;--pri-tint:#1c2d25;--ok:#4bbd85;--warn:#dda23a;--bad:#e2685c;--wbg:#2d2717;--bbg:#331f1c;--gbg:#17301f}}
+:root[data-theme="dark"]{--bg:#10140f;--surface:#171d17;--ink:#e8ece7;--mut:#93a294;--line:#2a332a;
+ --pri:#3f8f76;--pri-ink:#2c6b55;--pri-tint:#1c2d25;--ok:#4bbd85;--warn:#dda23a;--bad:#e2685c;--wbg:#2d2717;--bbg:#331f1c;--gbg:#17301f}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 var(--font-ui)}
+h1{font-family:var(--font-display);font-weight:600;font-size:19px;margin:0;letter-spacing:.1px}
+header{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 20px;background:var(--surface);border-bottom:1px solid var(--line);flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px}
+.mark{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;background:var(--pri);color:#fff;font-family:var(--font-display);font-weight:600;font-size:16px;flex:none}
+.hdr-right{display:flex;align-items:center;gap:14px}.who{font-weight:500}
+main{max-width:1120px;margin:0 auto;padding:20px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:16px}
+.login-wrap{min-height:80vh;display:flex;align-items:center;justify-content:center;padding:24px 16px}
+.login{max-width:360px;width:100%;box-shadow:0 8px 28px -14px rgba(20,30,20,.28)}
+.login .brand{margin-bottom:4px}.login .mark{width:36px;height:36px;font-size:18px}
+.login p.mut{margin:2px 0 18px}
+.fl{display:block;font-size:12px;color:var(--mut);margin-bottom:12px}
+.fl input{display:block;width:100%;margin-top:5px}
+.hint{margin-top:14px !important;font-size:12px}.hint code{background:var(--pri-tint);color:var(--pri);padding:1px 5px;border-radius:4px;font-size:11px}
+input,select,textarea,button{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:7px;padding:7px 10px;transition:border-color .12s,background .12s}
+input[type=number]{width:52px;padding:7px 4px}textarea{width:100%;min-width:170px;height:46px;resize:vertical}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible{outline:2px solid var(--pri);outline-offset:1px;border-color:var(--pri)}
+button{cursor:pointer;background:var(--pri);color:#fff;border-color:var(--pri);padding:7px 14px;font-weight:500}
+button:hover{background:var(--pri-ink);border-color:var(--pri-ink)}
+button.sec{background:transparent;color:var(--pri);border:1px solid var(--line)}button.sec:hover{background:var(--pri-tint);border-color:var(--pri)}
+button.dng{background:transparent;color:var(--bad);border:1px solid var(--line)}button.dng:hover{background:var(--bbg);border-color:var(--bad)}
+input:disabled,textarea:disabled,select:disabled{opacity:.5;cursor:not-allowed;background:var(--bg)}
+.tabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:18px;border-bottom:1px solid var(--line)}
+.tabs button{background:none;color:var(--mut);border:none;border-bottom:2px solid transparent;border-radius:0;padding:9px 4px;margin-right:18px;font-weight:500}
+.tabs button:hover{color:var(--ink);background:none}
+.tabs button.on{color:var(--pri);border-bottom-color:var(--pri)}
+.tw{overflow-x:auto}table{border-collapse:collapse;width:100%}
+th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-size:11.5px;color:var(--mut);font-weight:500;border-bottom:1.5px solid var(--ink)}
+.tw tbody tr:hover td{background:var(--pri-tint)}
+.al{padding:10px 14px;border-radius:6px;margin-bottom:10px;background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--line);color:var(--ink)}
+.al.w{border-left-color:var(--warn)}.al.g{border-left-color:var(--ok)}
+.al.b{border-left-color:var(--bad);background:var(--bbg);color:var(--bad);font-weight:500}
+.tag{display:inline-block;padding:2px 9px;border-radius:99px;font-size:11.5px;font-weight:500;background:var(--bg);border:1px solid var(--line)}
+.tag.ok{background:var(--gbg);color:var(--ok);border-color:transparent}.tag.w{background:var(--wbg);color:var(--warn);border-color:transparent}.tag.b{background:var(--bbg);color:var(--bad);border-color:transparent}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}.mut{color:var(--mut);font-size:12px}
+.calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-top:8px}.calhd{font-size:11px;color:var(--mut);text-align:center;padding:2px}
+.calday{min-height:56px;border:1px solid var(--line);border-radius:8px;padding:4px;cursor:pointer;font-size:12px;position:relative}.calday:hover{border-color:var(--pri);background:var(--pri-tint)}.calday.blank{border-color:transparent;cursor:default}.calday.blank:hover{background:none}
+.calday .dn{font-weight:600}
+.calday.wo{background:var(--bg);border-style:dashed}.calday .wolbl{position:absolute;top:4px;right:5px;font-size:9px;color:var(--mut)}
+.calday.off-g{background:var(--bbg);border-color:transparent}.calday.off-g:hover{background:var(--bbg)}
+.calday.off-s{background:var(--pri-tint);border-color:transparent}.calday.off-s:hover{background:var(--pri-tint)}
+.calday .reason{margin-top:3px;font-size:9.5px;line-height:1.2;color:var(--ink);opacity:.85;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
+.swatch{width:11px;height:11px;border-radius:3px;display:inline-block}.swatch.g{background:var(--bbg);border:1px solid var(--bad)}.swatch.s{background:var(--pri-tint);border:1px solid var(--pri)}
+.legend{display:flex;gap:16px;align-items:center;font-size:12px;color:var(--mut);margin-top:8px;flex-wrap:wrap}.legend span{display:inline-flex;align-items:center;gap:5px}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:8px;display:none;z-index:9;font-size:13px}
+</style></head><body>
+<div id="app"></div><div id="toast"></div>
+<script>
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid=()=>Math.random().toString(36).slice(2,9);
+const iso=d=>{const z=new Date(d);return z.getFullYear()+'-'+String(z.getMonth()+1).padStart(2,'0')+'-'+String(z.getDate()).padStart(2,'0')};
+const mon=d=>{const x=new Date(d);x.setHours(12,0,0,0);x.setDate(x.getDate()-((x.getDay()+6)%7));return x};
+const addW=(k,n)=>{const x=new Date(k+'T12:00:00');x.setDate(x.getDate()+7*n);return iso(x)};
+const CUR=iso(mon(new Date())),LAST=addW(CUR,-1);
+const fmt=k=>{const a=new Date(k+'T12:00:00'),b=new Date(k+'T12:00:00');b.setDate(b.getDate()+5);const o={day:'numeric',month:'short'};return a.toLocaleDateString('en-GB',o)+' – '+b.toLocaleDateString('en-GB',o)};
+const MAXH=80;
+let mh='',lbp='last',rsec='',rhd='',rFrom='',rTo='',calMonth=CUR.slice(0,8)+'01',impFile=null,impName='',impResults=null,impSummary=null,impPreview=null,ovYear='',ovCourse='',ovHead='',ovStatus='',ovSearch='',secSearch='',usrSearch='',hSec='',edRec='',edHol='',lastChartRows=null,lastChartLabel='',chartInstance=null,S=null,me=null,tab='home',wk=LAST,ow=LAST,dbDoc=null,mode='local';
+const seed=()=>({users:[{id:'u0',name:'Administrator',username:'admin',password:'admin123',role:'admin',active:true}],years:[{id:'y1',name:'Year 1'},{id:'y2',name:'Year 2'}],courses:[],categories:[],sections:[],plans:{},actuals:{},unlocks:{},holidays:[],weeklyOff:0,termStart:'2026-07-01'});
+window.addEventListener('unhandledrejection',e=>toast('Error: '+((e.reason&&e.reason.message)||e.reason),1));window.addEventListener('error',e=>toast('Error: '+e.message,1));
+const norm=()=>{['users','years','courses','categories','sections','holidays'].forEach(k=>{if(!Array.isArray(S[k]))S[k]=[]});['plans','actuals','unlocks'].forEach(k=>{if(!S[k]||typeof S[k]!=='object'||Array.isArray(S[k]))S[k]={}});if(S.weeklyOff==null||isNaN(S.weeklyOff))S.weeklyOff=0;if(!S.termStart)S.termStart='2026-07-01'};
+let lastSave=0,sync='';
+function setSync(m,bad){sync=m;const e=$('#sync');if(e){e.textContent=m;e.style.color=bad?'var(--bad)':''}}
+async function save(){lastSave=Date.now();setSync('Saving…');
+ try{const r=await fetch('/api/state',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(S)});
+  if(!r.ok)throw new Error('Server returned '+r.status);
+  setSync('✓ Saved')
+ }catch(e){setSync('✗ Not saved',1);toast('Save failed: '+(e.message||e)+' — check your connection and try again',1)}}
+async function pollState(){try{const r=await fetch('/api/state');if(!r.ok)return;const data=await r.json();
+ if(!data){if(!S){S=seed();norm();await save()}return}
+ if(Date.now()-lastSave<3000)return; // avoid clobbering an in-flight save with a stale poll
+ S=data;norm();if(me)me=S.users.find(u=>u.id===me.id&&u.active)||null;
+ if(!document.activeElement||!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName))render()}catch(e){}}
+function toast(m,bad){const t=$('#toast');t.textContent=m;t.style.background=bad?'var(--bad)':'';t.style.color=bad?'#fff':'';t.style.display='block';clearTimeout(t._t);t._t=setTimeout(()=>t.style.display='none',3200)}
+const K=(s,w)=>s+'|'+w,unl=(s,w)=>!!S.unlocks[K(s,w)];
+const planEd=(s,w)=>w>=CUR||unl(s,w),actEd=(s,w)=>w<CUR&&(w===LAST||unl(s,w));
+const nm=(list,id)=>(S[list].find(x=>x.id===id)||{}).name||'—';
+const secLabel=s=>`${nm('years',s.yearId)} · ${nm('courses',s.courseId)} · ${esc(s.name)}`;
+const catSum=h=>h?Object.values(h).reduce((s,v)=>s+(typeof v==='number'?v:0),0):0;
+const hasAny=h=>h&&Object.values(h).some(v=>typeof v==='number');
+function status(s,w){const p=S.plans[K(s,w)],a=S.actuals[K(s,w)];
+ if(!p)return w<CUR?['Not planned','b']:['Not planned','w'];
+ if(a)return(catSum(a.hours)<catSum(p.hours))?['Shortfall','w']:['Completed','ok'];
+ return w<CUR?['Actual pending','b']:['Planned','']}
+async function boot(){
+ setSync('Loading…');
+ try{const r=await fetch('/api/state');const data=r.ok?await r.json():null;
+  if(data){S=data}else{S=seed();await save()}
+  setSync('✓ Saved')
+ }catch(e){setSync('✗ Offline',1);toast('Could not reach the server — check your connection',1);S=seed()}
+ norm();
+ try{const id=sessionStorage.getItem('me');if(id)me=S.users.find(u=>u.id===id&&u.active)||null}catch(e){}
+ render();
+ setInterval(pollState,8000)}
+function login(){const u=$('#lu').value.trim().toLowerCase(),p=$('#lp').value;
+ const x=S.users.find(a=>a.username.toLowerCase()===u&&a.password===p);
+ if(!u||!p)return toast('Enter username and password',1);
+ if(!x)return toast('Invalid username or password',1);
+ if(!x.active)return toast('Account is disabled. Contact admin.',1);
+ me=x;tab='home';try{sessionStorage.setItem('me',x.id)}catch(e){}render()}
+function logout(){me=null;try{sessionStorage.removeItem('me')}catch(e){}render()}
+function render(){const A=$('#app');
+ if(!me){A.innerHTML=`<div class="login-wrap"><div class="card login">
+ <div class="brand"><span class="mark">W</span><div><h1>Weekly Tracker</h1><p class="mut">Academic &amp; training load, by week</p></div></div>
+ <label class="fl">Username<input id="lu" placeholder="e.g. admin" autocomplete="username"></label>
+ <label class="fl">Password<input id="lp" type="password" placeholder="••••••••" autocomplete="current-password"></label>
+ <button onclick="login()" style="width:100%">Sign in</button>
+ </div></div>`;
+ $('#lp').onkeydown=e=>{if(e.key==='Enter')login()};return}
+ const adm=me.role==='admin',tabs=adm?[['home','Overview & Unlock'],['import','Import Backlog'],['calendar','Calendar / Off Days'],['report','Progress Report'],['lb','Leaderboard'],['map','Head Mapping'],['users','Users'],['sections','Sections'],['years','Years'],['courses','Courses'],['categories','Load Categories']]:[['home','Weekly Load'],['calendar','Calendar / Off Days'],['report','My Progress'],['lb','Leaderboard']];
+ A.innerHTML=`<header><div class="brand"><span class="mark">W</span><h1>Weekly Tracker</h1><span class="tag">${adm?'Admin':'Dept. Head'}</span></div>
+ <div class="hdr-right"><span id="sync" class="mut">${esc(sync)}</span><span class="who">${esc(me.name)}</span><button class="sec" onclick="logout()">Logout</button></div></header><main>
+ <div class="tabs">${tabs.map(t=>`<button class="${tab===t[0]?'on':''}" onclick="tab='${t[0]}';render()">${t[1]}</button>`).join('')}</div>
+ ${adm?({home:adminHome,import:importV,calendar:calendarV,report:reportV,lb:lbV,map:mapV,users:usersV,sections:secV,years:()=>master('years','Year'),courses:()=>master('courses','Course'),categories:()=>master('categories','Load Category')})[tab]():(tab==='lb'?lbV():tab==='report'?reportV():tab==='calendar'?calendarV():headV())}</main>`;
+ if(tab==='report')setTimeout(drawProgressChart,0);else if(chartInstance){chartInstance.destroy();chartInstance=null}}
+function drawProgressChart(){const el=document.getElementById('progChart');
+ if(!el||!window.Chart||!lastChartRows||!lastChartRows.length){if(chartInstance){chartInstance.destroy();chartInstance=null}return}
+ if(chartInstance){chartInstance.destroy();chartInstance=null}
+ try{
+  const labels=lastChartRows.map(r=>fmt(r.w)),planned=lastChartRows.map(r=>r.ptot),actual=lastChartRows.map(r=>r.due&&r.hasA?r.atot:null);
+  chartInstance=new Chart(el,{type:'bar',data:{labels,datasets:[
+   {label:'Planned',data:planned,backgroundColor:'rgba(47,93,79,0.35)'},
+   {label:'Actual',data:actual,backgroundColor:'rgba(31,122,77,0.8)'}]},
+   options:{responsive:true,plugins:{legend:{position:'bottom'},title:{display:true,text:`Planned vs Actual hours — ${lastChartLabel}`}},scales:{y:{beginAtZero:true,title:{display:true,text:'Hours'}}}}})
+ }catch(e){chartInstance=null}}
+/* ---------- HEAD ---------- */
+function headV(){const mine=S.sections.filter(s=>s.headId===me.id);
+ if(!mine.length)return`<div class="al w">No sections are mapped to you yet. Please contact the admin.</div>`;
+ if(!S.categories.length)return`<div class="al w">The admin hasn't set up any Load Categories yet (e.g. Academic, CCPD Training, SEEP, Domain). Please contact the admin before you can plan weekly load.</div>`;
+ if(!mine.find(s=>s.id===hSec))hSec='';
+ const shown=hSec?mine.filter(s=>s.id===hSec):mine;
+ const pend=mine.filter(s=>!S.actuals[K(s.id,LAST)]&&(S.plans[K(s.id,LAST)]||actEd(s.id,LAST)));
+ const noPlan=mine.filter(s=>!S.plans[K(s.id,CUR)]);
+ const weeks=[];for(let w=iso(mon(S.termStart));w<=addW(CUR,4);w=addW(w,1))weeks.push(w);
+ const cats=S.categories;
+ const rows=shown.map(s=>{const p=S.plans[K(s.id,wk)]||{},a=S.actuals[K(s.id,wk)]||{},pe=planEd(s.id,wk),ae=actEd(s.id,wk)&&!!S.plans[K(s.id,wk)],st=status(s.id,wk),id=s.id;
+  const ph=p.hours||{},ah=a.hours||{};
+  const short=hasAny(ah)&&(catSum(ah)<catSum(ph));
+  const cells=cats.map(c=>`<td><input type="number" min="0" max="${MAXH}" step="0.5" id="p_${id}_${c.id}" value="${ph[c.id]??''}" ${pe?'':'disabled'}></td><td><input type="number" min="0" max="${MAXH}" step="0.5" id="a_${id}_${c.id}" value="${ah[c.id]??''}" ${ae?'':'disabled'} oninput="chk('${id}')"></td>`).join('');
+  return`<tr><td><b>${secLabel(s)}</b><br><span class="tag ${st[1]}">${st[0]}</span>${unl(id,wk)?' <span class="tag ok">Unlocked</span>':''}<br><span class="mut">${workingDaysInWeek(wk,id)} working day(s) this week</span></td>
+  ${cells}
+  <td><textarea id="rm_${id}" placeholder="Reason if load not covered…" ${ae?'':'disabled'}>${esc(a.remark||'')}</textarea><div class="mut" id="vr_${id}">${short?'Shortfall (compensation allowed across categories): '+(catSum(ah)-catSum(ph)).toFixed(1)+' h':''}</div></td>
+  <td>${pe||ae?`<button onclick="saveRow('${id}')">Save</button>`:''} ${(pe&&hasAny(ph))||(ae&&hasAny(ah))?`<button class="dng" onclick="deleteMyRecord('${id}')">Delete</button>`:''} ${!pe&&!ae?'<span class="mut">🔒 Locked</span>':''}</td></tr>`}).join('');
+ const headCells=cats.map(c=>`<th>Plan ${esc(c.name)} (h)</th><th>Actual ${esc(c.name)} (h)</th>`).join('');
+ return`${pend.length?`<div class="al b">⚠ Actual load for last week (${fmt(LAST)}) is pending for ${pend.length} section(s): ${pend.map(s=>esc(s.name)).join(', ')}. Submit before it locks after this week.</div>`:''}
+ ${noPlan.length?`<div class="al w">Planned load for the current week (${fmt(CUR)}) is not defined for ${noPlan.length} section(s).</div>`:''}
+ <div class="card"><b>Bulk-plan upcoming weeks</b><p class="mut">Set the same planned load across several upcoming weeks in one go, for one section or a whole year at once — you can still edit or delete any individual week afterward.</p>
+ <div class="row">${(()=>{const yrIds=[...new Set(mine.map(s=>s.yearId))],opts=[];
+  yrIds.forEach(yid=>{const n=mine.filter(s=>s.yearId===yid).length;if(n>1)opts.push(`<option value="year:${yid}">All my sections in ${esc(nm('years',yid))} (${n} sections)</option>`)});
+  mine.forEach(s=>opts.push(`<option value="sec:${s.id}">${secLabel(s)}</option>`));
+  return`<select id="bp_sec"><option value="">Apply to…</option>${opts.join('')}</select>`})()}
+ ${cats.map(c=>`<label class="mut" style="display:flex;flex-direction:column;gap:3px">${esc(c.name)}<input type="number" min="0" max="${MAXH}" step="0.5" id="bp_${c.id}" style="width:70px"></label>`).join('')}
+ <label class="mut" style="display:flex;flex-direction:column;gap:3px">Weeks<input type="number" min="1" max="52" value="4" id="bp_weeks" style="width:60px"></label>
+ <button onclick="bulkPlan()" style="align-self:flex-end">Apply</button></div></div>
+ <div class="card"><div class="row"><b>Week:</b><select onchange="wk=this.value;render()">${weeks.map(w=>`<option value="${w}" ${w===wk?'selected':''}>${fmt(w)}${w===CUR?' (This week)':w===LAST?' (Last week)':w>CUR?' (Upcoming)':''}</option>`).join('')}</select>
+ ${mine.length>1?`<b>Section:</b><select onchange="hSec=this.value;render()"><option value="">All my sections</option>${mine.map(s=>`<option value="${s.id}" ${s.id===hSec?'selected':''}>${secLabel(s)}</option>`).join('')}</select>`:''}
+ <span class="mut">Hours per week, by category. Plan: this & upcoming weeks. Actual: last week only; older weeks are locked until admin unlocks.</span></div>
+ <div class="tw"><table><tr><th>Section</th>${headCells}<th>Remark</th><th></th></tr>${rows||`<tr><td colspan=${2+cats.length*2} class="mut">No section matches this filter.</td></tr>`}</table></div></div>`}
+async function bulkPlan(){const sel=$('#bp_sec').value;if(!sel)return toast('Choose a section or a year to apply to',1);
+ const mine=S.sections.filter(s=>s.headId===me.id);
+ let targetIds;
+ if(sel.startsWith('year:')){const yid=sel.slice(5);targetIds=mine.filter(s=>s.yearId===yid).map(s=>s.id)}
+ else{targetIds=[sel.slice(4)]}
+ if(!targetIds.length)return toast('No matching sections found',1);
+ const n=parseInt($('#bp_weeks').value,10);if(!n||n<1||n>52)return toast('Enter a number of weeks between 1 and 52',1);
+ const ph={};let has=false,bad=false;
+ S.categories.forEach(c=>{const el=$('#bp_'+c.id);if(el&&el.value!==''){const v=parseFloat(el.value);if(isNaN(v)||v<0||v>MAXH)bad=true;else{ph[c.id]=v;has=true}}});
+ if(bad)return toast(`Hours must be between 0 and ${MAXH}`,1);
+ if(!has)return toast('Enter at least one category\'s hours',1);
+ const scopeMsg=targetIds.length>1?`${targetIds.length} sections`:'this section';
+ if(!confirm(`This will set the planned load for the next ${n} week(s) for ${scopeMsg}, starting this week, overwriting any existing plan for those weeks. Continue?`))return;
+ targetIds.forEach(sid=>{let w=CUR;for(let i=0;i<n;i++){S.plans[K(sid,w)]={hours:{...ph},by:me.id,ts:Date.now()};w=addW(w,1)}});
+ await save();toast(`Planned load set for ${n} week(s) across ${scopeMsg}`);render()}
+function chk(id){const p=S.plans[K(id,wk)];if(!p)return;
+ const ah={};S.categories.forEach(c=>{const el=$('#a_'+id+'_'+c.id);if(el){const v=parseFloat(el.value);if(!isNaN(v))ah[c.id]=v}});
+ $('#vr_'+id).textContent=(catSum(ah)<catSum(p.hours))?'⚠ Combined total below planned load — remark required (categories can offset each other)':''}
+async function saveRow(id){const ph={},ah={};let phHas=false,ahHas=false,badRange=false,planEnabled=false,actEnabled=false;
+ S.categories.forEach(c=>{
+  const pel=$('#p_'+id+'_'+c.id),ael=$('#a_'+id+'_'+c.id);
+  if(pel&&!pel.disabled){planEnabled=true;if(pel.value!==''){const v=parseFloat(pel.value);if(isNaN(v)||v<0||v>MAXH)badRange=true;else{ph[c.id]=v;phHas=true}}}
+  if(ael&&!ael.disabled){actEnabled=true;if(ael.value!==''){const v=parseFloat(ael.value);if(isNaN(v)||v<0||v>MAXH)badRange=true;else{ah[c.id]=v;ahHas=true}}}
+ });
+ if(badRange)return toast(`Hours must be between 0 and ${MAXH}`,1);
+ const k=K(id,wk);
+ if(planEnabled){if(!phHas)return toast('Enter at least one category\'s planned hours',1);S.plans[k]={hours:ph,by:me.id,ts:Date.now()}}
+ if(actEnabled&&ahHas){const p=S.plans[k];if(!p)return toast('Define the planned load first',1);
+  const r=$('#rm_'+id).value.trim();if((catSum(ah)<catSum(p.hours))&&r.length<5)return toast('Combined load not fully covered — please enter a remark (min 5 characters)',1);
+  S.actuals[k]={hours:ah,remark:r,by:me.id,ts:Date.now()}}
+ await save();toast('Saved');render()}
+async function deleteMyRecord(id){const s=S.sections.find(x=>x.id===id);if(!s||s.headId!==me.id)return toast('Not your section',1);
+ const pe=planEd(id,wk),ae=actEd(id,wk);
+ if(!pe&&!ae)return toast('This week is locked — ask the admin to unlock it first',1);
+ const k=K(id,wk),hasP=S.plans[k]!=null,hasA=S.actuals[k]!=null;
+ const parts=[];if(pe&&hasP)parts.push('planned');if(ae&&hasA)parts.push('actual');
+ if(!parts.length)return toast('Nothing to delete for this week',1);
+ if(!confirm(`Delete the ${parts.join(' and ')} load you entered for this section and week? This cannot be undone.`))return;
+ if(pe)delete S.plans[k];if(ae)delete S.actuals[k];
+ await save();toast('Deleted');render()}
+/* ---------- PROGRESS REPORT (compensation-aware, cumulative) ---------- */
+const isValidWeekKey=w=>/^\d{4}-\d{2}-\d{2}$/.test(w)&&!isNaN(new Date(w+'T12:00:00'));
+function commonYear(){const counts={};[...Object.keys(S.plans),...Object.keys(S.actuals)].forEach(k=>{const w=k.split('|')[1];if(isValidWeekKey(w)){const y=w.slice(0,4);counts[y]=(counts[y]||0)+1}});
+ let best=null,bestN=0;for(const y in counts)if(counts[y]>bestN){best=y;bestN=counts[y]}
+ return best?parseInt(best,10):new Date(S.termStart+'T12:00:00').getFullYear()}
+const isReasonableWeekKey=w=>isValidWeekKey(w)&&Math.abs(parseInt(w.slice(0,4),10)-commonYear())<=1;
+function workingDaysInWeek(weekKey,sectionId){let days=0;
+ for(let i=0;i<6;i++){const d=new Date(weekKey+'T12:00:00');d.setDate(d.getDate()+i);
+  if(d.getDay()===S.weeklyOff)continue;
+  const ds=iso(d);
+  if(S.holidays.some(h=>h.date===ds&&(h.sectionId==null||h.sectionId===sectionId)))continue;
+  days++}
+ return days}
+function progressCalc(sectionIds){
+ const weeks=[...new Set(Object.keys(S.plans).filter(k=>sectionIds.includes(k.split('|')[0])).map(k=>k.split('|')[1]))]
+  .filter(isReasonableWeekKey).sort((a,b)=>new Date(a+'T12:00:00')-new Date(b+'T12:00:00'));
+ const cumP={},cumA={};S.categories.forEach(c=>{cumP[c.id]=0;cumA[c.id]=0});
+ let cp=0,ca=0;
+ const rows=weeks.map(w=>{
+  const ph={},ah={};let hasA=false;
+  S.categories.forEach(c=>{ph[c.id]=0;ah[c.id]=0});
+  sectionIds.forEach(sid=>{const p=S.plans[K(sid,w)],a=S.actuals[K(sid,w)];
+   if(p&&p.hours)S.categories.forEach(c=>{ph[c.id]+=(p.hours[c.id]||0)});
+   if(a&&a.hours){hasA=true;S.categories.forEach(c=>{ah[c.id]+=(a.hours[c.id]||0)})}
+  });
+  const ptot=catSum(ph),atot=catSum(ah),due=w<=LAST;
+  let color='mut',label='Upcoming',snapP=null,snapA=null;
+  if(due){cp+=ptot;S.categories.forEach(c=>cumP[c.id]+=ph[c.id]);
+   if(hasA){ca+=atot;S.categories.forEach(c=>cumA[c.id]+=ah[c.id]);label=atot>=ptot?'Met / Exceeded':'Shortfall';color=atot>=ptot?'ok':'b'}
+   else{label='Not submitted';color='b'}
+   snapP={...cumP};snapA={...cumA}}
+  return{w,ph,ah,ptot,atot,due,hasA,label,color,cumP:snapP,cumA:snapA,cumTotalP:due?cp:null,cumTotalA:due?ca:null};
+ });
+ return{rows,totals:{planned:cp,actual:ca,balance:ca-cp}};
+}
+function recordEditable(sid,w){if(me.role==='admin')return{pe:true,ae:true};const pe=planEd(sid,w),ae=actEd(sid,w)&&!!S.plans[K(sid,w)];return{pe,ae}}
+function progressTable(sectionIds,label,fromWk,toWk){
+ if(!sectionIds.length)return`<div class="al w">No sections to show.</div>`;
+ if(!S.categories.length)return`<div class="al w">No Load Categories have been set up yet.</div>`;
+ const{rows:allRows}=progressCalc(sectionIds);
+ if(!allRows.length)return`<div class="al w">No weekly load has been planned yet for ${esc(label)}.</div>`;
+ const filtered=(fromWk||toWk);
+ const rows=allRows.filter(r=>(!fromWk||r.w>=fromWk)&&(!toWk||r.w<=toWk));
+ if(!rows.length)return`<div class="al w">No weeks match this filter for ${esc(label)}.</div>`;
+ const editSid=sectionIds.length===1?sectionIds[0]:null,cats=S.categories;
+ const cell=(actual,planned,due,has)=>{if(!due||!has)return'<td class="mut">—</td>';const ok=actual>=planned;return`<td style="color:${ok?'var(--ok)':'var(--bad)'};font-weight:600">${actual.toFixed(1)}</td>`};
+ const balInner=v=>v==null?'<span class="mut">—</span>':`<b style="color:${v>=0?'var(--ok)':'var(--bad)'}">${(v>=0?'+':'')+v.toFixed(1)}</b>`;
+ const bal=v=>`<td>${balInner(v)}</td>`;
+ const trs=rows.map(r=>{
+  if(editSid&&edRec===K(editSid,r.w)){
+   const curP=(S.plans[K(editSid,r.w)]||{}).hours||{},curA=(S.actuals[K(editSid,r.w)]||{}).hours||{};
+   const inputs=cats.map(c=>`<td><input type="number" min="0" max="${MAXH}" step="0.5" id="er_p_${c.id}" value="${curP[c.id]??''}" style="width:56px"></td><td><input type="number" min="0" max="${MAXH}" step="0.5" id="er_a_${c.id}" value="${curA[c.id]??''}" style="width:56px"></td>`).join('');
+   return`<tr><td>${fmt(r.w)}</td>${editSid?'<td></td>':''}${inputs}
+   <td colspan="${1+cats.length}"><textarea id="er_rm" placeholder="Remark">${esc((S.actuals[K(editSid,r.w)]||{}).remark||'')}</textarea></td>
+   <td><button onclick="saveRecordAt('${editSid}','${r.w}')">Save</button> <button class="sec" onclick="edRec='';render()">Cancel</button></td></tr>`}
+  const canEdit=editSid&&(me.role==='admin'||recordEditable(editSid,r.w).pe||recordEditable(editSid,r.w).ae);
+  const planActCells=cats.map(c=>`<td>${r.ph[c.id].toFixed(1)}</td>${cell(r.ah[c.id],r.ph[c.id],r.due,r.hasA)}`).join('');
+  const balCells=cats.map(c=>bal(r.due&&r.cumA?r.cumA[c.id]-r.cumP[c.id]:null)).join('');
+  const wdCell=editSid?`<td class="mut">${workingDaysInWeek(r.w,editSid)}</td>`:'';
+  return`<tr><td>${fmt(r.w)}${r.w===CUR?' <span class="mut">(current)</span>':r.w===LAST?' <span class="mut">(last)</span>':''}</td>
+  ${wdCell}
+  ${planActCells}
+  <td><span class="tag ${r.color}">${r.label}</span></td>
+  ${balCells}
+  <td>${balInner(r.due?r.cumTotalA-r.cumTotalP:null)}${canEdit?`<br><button class="sec" onclick="edRec='${K(editSid,r.w)}';render()">Edit</button> <button class="dng" onclick="deleteRecordAt('${editSid}','${r.w}')">Delete</button>`:''}</td></tr>`}).join('');
+ const totPlan={},totAct={};cats.forEach(c=>{totPlan[c.id]=rows.reduce((s,r)=>s+r.ph[c.id],0);totAct[c.id]=rows.reduce((s,r)=>s+(r.due&&r.hasA?r.ah[c.id]:0),0)});
+ const totBalCat=cats.map(c=>totAct[c.id]-totPlan[c.id]),totBal=totBalCat.reduce((s,v)=>s+v,0);
+ const catHeadCells=cats.map(c=>`<th>Plan ${esc(c.name)} (h)</th><th>Actual ${esc(c.name)} (h)</th>`).join('');
+ const balHeadCells=cats.map(c=>`<th>Balance ${esc(c.name)} (h)</th>`).join('');
+ const totRowCells=cats.map(c=>`<td>${totPlan[c.id].toFixed(1)}</td><td style="color:${totAct[c.id]>=totPlan[c.id]?'var(--ok)':'var(--bad)'}">${totAct[c.id].toFixed(1)}</td>`).join('');
+ const totBalRowCells=cats.map((c,i)=>bal(totBalCat[i])).join('');
+ lastChartRows=rows;lastChartLabel=label;
+ return`<div class="tw"><table><tr><th>Week</th>${editSid?'<th>Working Days</th>':''}${catHeadCells}<th>Status</th>${balHeadCells}<th>Balance Total (h)${editSid?' / Actions':''}</th></tr>${trs}
+ <tr style="font-weight:600;background:var(--bg)"><td>Total (${filtered?'shown weeks':'all weeks'})</td>${editSid?'<td></td>':''}${totRowCells}
+ <td><span class="tag ${totBal>=0?'ok':'b'}">${totBal>=0?'On track':'Behind'}</span></td>${totBalRowCells}<td>${balInner(totBal)}</td></tr></table></div>
+ <div class="card"><canvas id="progChart" height="90"></canvas></div>
+ ${editSid?'<p class="mut">Edit or delete a specific week\'s record directly above — useful for correcting bad backlog imports. Heads can only touch weeks they would normally be allowed to edit; admins can edit or delete any week.</p>':''}`}
+async function saveRecordAt(sid,w){const ph={},ah={};let phHas=false,ahHas=false,badRange=false;
+ S.categories.forEach(c=>{
+  const pv=$('#er_p_'+c.id).value,av=$('#er_a_'+c.id).value;
+  if(pv!==''){const v=parseFloat(pv);if(isNaN(v)||v<0||v>MAXH)badRange=true;else{ph[c.id]=v;phHas=true}}
+  if(av!==''){const v=parseFloat(av);if(isNaN(v)||v<0||v>MAXH)badRange=true;else{ah[c.id]=v;ahHas=true}}
+ });
+ if(badRange)return toast(`Hours must be between 0 and ${MAXH}`,1);
+ const rm=$('#er_rm').value.trim();
+ const{pe,ae}=recordEditable(sid,w);
+ if(!pe&&phHas)return toast('You are not allowed to edit the planned load for this week',1);
+ if(!ae&&ahHas)return toast('You are not allowed to edit the actual load for this week',1);
+ if(phHas&&ahHas&&(catSum(ah)<catSum(ph))&&rm.length<5)return toast('Combined Actual hours are below combined Planned — a remark (5+ characters) is required',1);
+ const k=K(sid,w);
+ if(pe){if(phHas)S.plans[k]={hours:ph,by:me.id,ts:Date.now()};else delete S.plans[k]}
+ if(ae){if(ahHas)S.actuals[k]={hours:ah,remark:rm,by:me.id,ts:Date.now()};else delete S.actuals[k]}
+ edRec='';await save();toast('Record updated');render()}
+async function deleteRecordAt(sid,w){const{pe,ae}=recordEditable(sid,w);
+ if(!pe&&!ae)return toast('This week is locked — ask the admin to unlock it first',1);
+ const k=K(sid,w),parts=[];if(pe&&S.plans[k]!=null)parts.push('planned');if(ae&&S.actuals[k]!=null)parts.push('actual');
+ if(!parts.length)return toast('Nothing to delete for this week',1);
+ if(!confirm(`Delete the ${parts.join(' and ')} load for this section and week? This cannot be undone.`))return;
+ if(pe)delete S.plans[k];if(ae)delete S.actuals[k];
+ await save();toast('Deleted');render()}
+function weekOpts(sel,ph){const weeks=[];for(let w=iso(mon(S.termStart));w<=addW(CUR,4);w=addW(w,1))weeks.push(w);
+ return`<option value="">${ph}</option>${weeks.map(w=>`<option value="${w}" ${w===sel?'selected':''}>${fmt(w)}</option>`).join('')}`}
+function reportV(){
+ const adm=me.role==='admin';
+ if(!adm){const mine=S.sections.filter(s=>s.headId===me.id);
+  if(!mine.length)return`<div class="al w">No sections are mapped to you yet. Please contact the admin.</div>`;
+  if(!mine.find(s=>s.id===rsec))rsec='';
+  const ids=rsec?[rsec]:mine.map(s=>s.id);
+  return`<div class="al g">Academic and Training hours can offset each other within a week, and a shortfall in one week can be made up in any other week — the running balance below reflects that.</div>
+  <div class="card"><div class="row"><b>Section:</b><select onchange="rsec=this.value;render()"><option value="">All my sections (combined)</option>${mine.map(s=>`<option value="${s.id}" ${s.id===rsec?'selected':''}>${secLabel(s)}</option>`).join('')}</select>
+  <b>From week:</b><select onchange="rFrom=this.value;render()">${weekOpts(rFrom,'Earliest')}</select>
+  <b>To week:</b><select onchange="rTo=this.value;render()">${weekOpts(rTo,'Latest')}</select>
+  ${(rFrom||rTo)?'<button class="sec" onclick="rFrom=\'\';rTo=\'\';render()">Clear</button>':''}</div>
+  ${progressTable(ids,rsec?nm2('sections',rsec):'your sections',rFrom,rTo)}</div>`}
+ const heads=S.users.filter(u=>u.role==='head'&&u.active);
+ if(!heads.length)return`<div class="al w">No department heads yet.</div>`;
+ if(!heads.find(u=>u.id===rhd))rhd=heads[0].id;
+ const hs=S.sections.filter(s=>s.headId===rhd);
+ if(!hs.find(s=>s.id===rsec))rsec='';
+ const ids=rsec?[rsec]:hs.map(s=>s.id);
+ return`<div class="card"><div class="row"><b>Head:</b><select onchange="rhd=this.value;rsec='';render()">${heads.map(u=>`<option value="${u.id}" ${u.id===rhd?'selected':''}>${esc(u.name)}</option>`).join('')}</select>
+ <b>Section:</b><select onchange="rsec=this.value;render()"><option value="">All sections (combined)</option>${hs.map(s=>`<option value="${s.id}" ${s.id===rsec?'selected':''}>${secLabel(s)}</option>`).join('')}</select></div>
+ <div class="row"><b>From week:</b><select onchange="rFrom=this.value;render()">${weekOpts(rFrom,'Earliest')}</select>
+ <b>To week:</b><select onchange="rTo=this.value;render()">${weekOpts(rTo,'Latest')}</select>
+ ${(rFrom||rTo)?'<button class="sec" onclick="rFrom=\'\';rTo=\'\';render()">Clear</button>':''}</div>
+ ${progressTable(ids,'this head',rFrom,rTo)}</div>`}
+const nm2=(list,id)=>{const s=S[list].find(x=>x.id===id);return s?secLabel(s):'—'};
+/* ---------- IMPORT BACKLOG ---------- */
+function downloadTemplate(){
+ if(!window.XLSX)return toast('The spreadsheet library failed to load — check your internet connection and try again',1);
+ const catNames=S.categories.length?S.categories.map(c=>c.name):['Academic','CCPD Training'];
+ const wsData=[
+  ["Year","Course","Section","Head Username","Week (any date in that week)","Category","Planned Hrs","Actual Hrs","Remark (if shortfall)"],
+  ["Year 1","Computer Science","A","heada", new Date(2026,7,10), catNames[0], 8, 6, "Guest lecture cancelled; training extended to cover the gap"],
+  ["Year 1","Computer Science","A","heada", new Date(2026,7,10), catNames[1]||'Training', 8, 14, ""]
+ ];
+ const ws=XLSX.utils.aoa_to_sheet(wsData);
+ ws['!cols']=[{wch:12},{wch:16},{wch:12},{wch:16},{wch:26},{wch:18},{wch:12},{wch:12},{wch:34}];
+ const insData=[["Weekly Tracker — Backlog Import Template"],[""],
+  ["How to use this file"],
+  ["1. Fill in the 'Backlog' sheet — ONE ROW PER CATEGORY per Section per Week. If a section has 3 load"],
+  ["   categories that week (e.g. Academic, CCPD Training, SEEP), that's 3 rows, all with the same Year/"],
+  ["   Course/Section/Week, one row per Category."],
+  ["2. Do not rename the sheet or change the column headers in row 1."],
+  ["3. Upload the file from Admin > Import Backlog."],[""],
+  ["Column notes"],
+  ["Year / Course / Section — text names; created automatically on import if they don't already exist. Keep spelling identical across rows for the same section."],
+  ["Category — must match one of your Load Categories (Admin > Load Categories) by name; created automatically if it doesn't exist yet. Keep spelling identical across rows for the same category."],
+  ["Head Username — an existing Head's login username. Leave blank to assign later. Ignored if the section already has a head."],
+  ["Week — any date inside the target week; it snaps to that week's Monday automatically."],
+  ["Planned/Actual Hrs — 0 to 80, decimals allowed. Leave Actual blank for weeks with no actual data yet."],
+  ["Remark — required on at least one of that section/week's rows if the combined Actual hours across ALL its categories are below the combined Planned hours, and both Planned and Actual are given."],[""],
+  ["Rows 2-3 of the Backlog sheet are a filled-in example (one section/week split across two categories) —"],
+  ["delete or overwrite them before importing your real data, or they will be imported as real records."]];
+ const wsI=XLSX.utils.aoa_to_sheet(insData);wsI['!cols']=[{wch:100}];
+ const wb=XLSX.utils.book_new();
+ XLSX.utils.book_append_sheet(wb,wsI,'Instructions');
+ XLSX.utils.book_append_sheet(wb,ws,'Backlog');
+ XLSX.writeFile(wb,'backlog-import-template.xlsx')}
+function onImpFile(el){impFile=el.files[0]||null;impName=impFile?impFile.name:'';impResults=null;impPreview=null;render()}
+function impNum(v){if(v===''||v===undefined||v===null)return null;const n=typeof v==='number'?v:parseFloat(v);return isNaN(n)?NaN:n}
+const MONTH_MAP={jan:1,january:1,feb:2,february:2,mar:3,march:3,apr:4,april:4,may:5,jun:6,june:6,jul:7,july:7,aug:8,august:8,sep:9,sept:9,september:9,oct:10,october:10,nov:11,november:11,dec:12,december:12};
+function toImpDate(v){
+ if(v&&typeof v==='object'&&typeof v.getTime==='function'&&!isNaN(v.getTime()))return iso(v);
+ if(typeof v==='number'&&window.XLSX&&XLSX.SSF){try{const d=XLSX.SSF.parse_date_code(v);if(d&&d.y)return`${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`}catch(e){}}
+ if(typeof v==='string'&&v.trim()){
+  const s=v.trim();
+  // Free-text week ranges ("16-17 july", "31-3 Sept", "3rd August") are common in real backlog
+  // sheets but JS's native Date() parses them unpredictably (wrong year, wrong month, or fails
+  // outright). Find every "<day><st/nd/rd/th?> <month name>" occurrence and anchor on the LAST
+  // one — for a range like "16-17 july" that's "17 july"; for "31-3 Sept" that's "3 Sept".
+  const yrM=s.match(/(20\d{2})/);const year=yrM?parseInt(yrM[1],10):new Date(S.termStart+'T12:00:00').getFullYear();
+  const re=/(\d{1,2})(?:st|nd|rd|th)?\s*[-–]?\s*([A-Za-z]{3,9})/g;
+  let m,last=null;
+  while((m=re.exec(s))){const mo=MONTH_MAP[m[2].toLowerCase().slice(0,3)];if(mo)last={d:parseInt(m[1],10),mo}}
+  if(last){const dt=new Date(year,last.mo-1,last.d,12,0,0);if(!isNaN(dt))return iso(dt)}
+  // No recognizable month name found — fall back to native parsing, which is reliable for
+  // clean unambiguous dates like "2026-08-10".
+  const d=new Date(s.length<=10?s+'T12:00:00':s);if(!isNaN(d))return iso(d)
+ }
+ return null}
+async function parseImportFile(){
+ if(!impFile)return toast('Choose a file first',1);
+ if(!window.XLSX)return toast('The spreadsheet library failed to load — check your internet connection and try again',1);
+ let buf;try{buf=await impFile.arrayBuffer()}catch(e){return toast('Could not read the selected file',1)}
+ let wb;try{wb=XLSX.read(buf,{type:'array',cellDates:true})}catch(e){return toast('Could not read this file — make sure it is a valid .xlsx file',1)}
+ const wsName=wb.SheetNames.includes('Backlog')?'Backlog':wb.SheetNames[0];
+ const rows=XLSX.utils.sheet_to_json(wb.Sheets[wsName],{header:1,raw:true,defval:''});
+ if(rows.length<2)return toast('No data rows found in the sheet',1);
+ const badRows=[],newYearNames=[],newCourseNames=[],newCategoryNames=[],newSectionCombos=[],groups={};
+ const stagedYearNames=new Set(S.years.map(y=>y.name.toLowerCase()));
+ const stagedCourseNames=new Set(S.courses.map(c=>c.name.toLowerCase()));
+ const stagedCategoryNames=new Set(S.categories.map(c=>c.name.toLowerCase()));
+ const stagedSectionKeys=new Set(S.sections.map(s=>`${nm('years',s.yearId).toLowerCase()}|${nm('courses',s.courseId).toLowerCase()}|${s.name.toLowerCase()}`));
+ for(let i=1;i<rows.length;i++){const r=rows[i],sheetRow=i+1;
+  const yearName=String(r[0]||'').trim(),courseName=String(r[1]||'').trim(),sectionName=String(r[2]||'').trim(),headUser=String(r[3]||'').trim().toLowerCase();
+  const weekRaw=r[4],catName=String(r[5]||'').trim(),remark=String(r[8]||'').trim();
+  if(!yearName&&!courseName&&!sectionName&&!catName&&!weekRaw)continue;
+  if(!yearName||!courseName||!sectionName||!catName){badRows.push({row:sheetRow,msg:'Missing Year, Course, Section or Category'});continue}
+  const wkDate=toImpDate(weekRaw);
+  if(!wkDate){badRows.push({row:sheetRow,msg:'Invalid or missing week date'});continue}
+  const weekKey=iso(mon(wkDate));
+  const pa=impNum(r[6]),aa=impNum(r[7]);
+  if([pa,aa].some(v=>typeof v==='number'&&isNaN(v))){badRows.push({row:sheetRow,msg:'Planned or Actual hours is not a number'});continue}
+  if([pa,aa].some(v=>v!==null&&(v<0||v>MAXH))){badRows.push({row:sheetRow,msg:`Hours must be between 0 and ${MAXH}`});continue}
+  if(pa===null&&aa===null){badRows.push({row:sheetRow,msg:'No Planned or Actual hours given for this category — nothing to import'});continue}
+  if(!stagedYearNames.has(yearName.toLowerCase())){newYearNames.push(yearName);stagedYearNames.add(yearName.toLowerCase())}
+  if(!stagedCourseNames.has(courseName.toLowerCase())){newCourseNames.push(courseName);stagedCourseNames.add(courseName.toLowerCase())}
+  if(!stagedCategoryNames.has(catName.toLowerCase())){newCategoryNames.push(catName);stagedCategoryNames.add(catName.toLowerCase())}
+  const secKey=`${yearName.toLowerCase()}|${courseName.toLowerCase()}|${sectionName.toLowerCase()}`;
+  if(!stagedSectionKeys.has(secKey)){newSectionCombos.push({year:yearName,course:courseName,section:sectionName});stagedSectionKeys.add(secKey)}
+  const gKey=`${secKey}|${weekKey}`;
+  const g=groups[gKey]=groups[gKey]||{yearName,courseName,sectionName,headUser,weekKey,sheetRows:[],cats:{},remark:''};
+  g.sheetRows.push(sheetRow);g.cats[catName]=g.cats[catName]||{};
+  if(pa!==null)g.cats[catName].pa=pa;if(aa!==null)g.cats[catName].aa=aa;
+  if(remark)g.remark=remark;if(headUser)g.headUser=headUser}
+ const validGroups=[];
+ for(const gKey in groups){const g=groups[gKey],catVals=Object.values(g.cats);
+  const planSum=catVals.reduce((s,c)=>s+(c.pa||0),0),actSum=catVals.reduce((s,c)=>s+(c.aa||0),0);
+  const hasPlan=catVals.some(c=>c.pa!=null),hasActual=catVals.some(c=>c.aa!=null);
+  if(hasPlan&&hasActual&&(actSum<planSum)&&g.remark.length<5){
+   g.sheetRows.forEach(sr=>badRows.push({row:sr,msg:'Combined Actual hours across this section/week\'s categories are below combined Planned — a remark (5+ characters) is required on at least one row'}));
+   continue}
+  validGroups.push(g)}
+ impPreview={wsName,validGroups,badRows,newYearNames,newCourseNames,newCategoryNames,newSectionCombos};render()}
+async function confirmImport(){if(!impPreview)return;const{validGroups,badRows}=impPreview;
+ const results=badRows.map(b=>({row:b.row,ok:false,msg:b.msg}));let created={years:0,courses:0,sections:0,categories:0},okCount=0;
+ for(const g of validGroups){
+  let yr=S.years.find(y=>y.name.toLowerCase()===g.yearName.toLowerCase());if(!yr){yr={id:uid(),name:g.yearName};S.years.push(yr);created.years++}
+  let co=S.courses.find(c=>c.name.toLowerCase()===g.courseName.toLowerCase());if(!co){co={id:uid(),name:g.courseName};S.courses.push(co);created.courses++}
+  let sec=S.sections.find(s=>s.yearId===yr.id&&s.courseId===co.id&&s.name.toLowerCase()===g.sectionName.toLowerCase());
+  if(!sec){sec={id:uid(),name:g.sectionName,yearId:yr.id,courseId:co.id,headId:''};S.sections.push(sec);created.sections++}
+  if(!sec.headId&&g.headUser){const hu=S.users.find(u=>u.role==='head'&&u.active&&u.username.toLowerCase()===g.headUser);if(hu)sec.headId=hu.id}
+  const ph={},ah={};let hasPlan=false,hasActual=false;
+  for(const catName in g.cats){
+   let cat=S.categories.find(c=>c.name.toLowerCase()===catName.toLowerCase());if(!cat){cat={id:uid(),name:catName};S.categories.push(cat);created.categories++}
+   const c=g.cats[catName];if(c.pa!=null){ph[cat.id]=c.pa;hasPlan=true}if(c.aa!=null){ah[cat.id]=c.aa;hasActual=true}}
+  const k=K(sec.id,g.weekKey);
+  if(hasPlan)S.plans[k]={hours:ph,by:me.id,ts:Date.now(),src:'import'};
+  if(hasActual)S.actuals[k]={hours:ah,remark:g.remark,by:me.id,ts:Date.now(),src:'import'};
+  okCount++;g.sheetRows.forEach(sr=>results.push({row:sr,ok:true,msg:`${secLabel(sec)} — ${fmt(g.weekKey)}`}))}
+ impResults=results;impSummary={ok:okCount,fail:results.filter(r=>!r.ok).length,created};
+ impPreview=null;impFile=null;await save();render()}
+function cancelImportPreview(){impPreview=null;render()}
+function scanBadRecords(){const bad=[],cy=commonYear();
+ const check=(store,kind)=>Object.keys(store).forEach(k=>{const[sid,w]=k.split('|');
+  const reasons=[];
+  if(!isValidWeekKey(w))reasons.push('malformed week value');
+  else if(Math.abs(parseInt(w.slice(0,4),10)-cy)>1)reasons.push(`unusual year — most of your data is ${cy}, this record is dated ${w.slice(0,4)}`);
+  if(!S.sections.find(s=>s.id===sid))reasons.push('section no longer exists');
+  if(reasons.length)bad.push({k,kind,sid,w,reasons:reasons.join(', ')})});
+ check(S.plans,'Planned');check(S.actuals,'Actual');
+ return bad}
+function importV(){const bad=scanBadRecords();
+ return`<div class="al g">Load historical weekly Plan/Actual data in bulk from a spreadsheet. After you upload, you'll see a review step listing anything new it would create before anything is saved — so a spelling mismatch can't silently split your data into duplicates.</div>
+ <div class="card"><b>1. Get the template</b><p class="mut">Download it, fill in one row per Section per Week, then come back and upload it below.</p><button class="sec" onclick="downloadTemplate()">Download template (.xlsx)</button></div>
+ <div class="card"><b>2. Upload your filled-in file</b><div class="row"><input type="file" id="impInput" accept=".xlsx,.xls" onchange="onImpFile(this)"><button onclick="parseImportFile()">Review</button></div>${impName?`<div class="mut">Selected: ${esc(impName)}</div>`:''}</div>
+ ${impPreview?importPreviewV():''}
+ ${impResults?importResultsV():''}
+ <div class="card"><b>Data health check</b><p class="mut">Scans for records with a broken week value or pointing at a deleted section — these can happen from an old import or testing data, and can throw off week ordering and totals elsewhere in the app.</p>
+ ${bad.length?`<div class="al b">${bad.length} problem record(s) found.</div><div class="tw"><table><tr><th>Type</th><th>Section ID</th><th>Week value</th><th>Issue</th></tr>${bad.map(b=>`<tr><td>${b.kind}</td><td class="mut">${esc(b.sid)}</td><td class="mut">${esc(String(b.w))}</td><td>${esc(b.reasons)}</td></tr>`).join('')}</table></div><button class="dng" onclick="cleanBadRecords()">Delete all ${bad.length} flagged record(s)</button>`:'<div class="al g">No problem records found.</div>'}</div>`}
+async function cleanBadRecords(){const bad=scanBadRecords();if(!bad.length)return;
+ if(!confirm(`Permanently delete ${bad.length} flagged record(s)? This cannot be undone.`))return;
+ bad.forEach(b=>{if(b.kind==='Planned')delete S.plans[b.k];else delete S.actuals[b.k]});
+ await save();toast('Cleaned up');render()}
+function importPreviewV(){const p=impPreview,hasNew=p.newYearNames.length||p.newCourseNames.length||p.newCategoryNames.length||p.newSectionCombos.length;
+ return`<div class="card"><b>Review before importing</b>
+ <div class="row"><span class="tag ok">${p.validGroups.length} section/week record(s) ready to import</span>${p.badRows.length?`<span class="tag b">${p.badRows.length} row(s) will be skipped</span>`:''}</div>
+ ${hasNew?`<div class="al w"><b>This will create new records that don't exist yet — double-check none of these are just a typo or a different spelling of something you already have, or you'll end up with duplicate, split data:</b>
+  ${p.newYearNames.length?`<div style="margin-top:6px">New Year(s): ${p.newYearNames.map(esc).join(', ')}</div>`:''}
+  ${p.newCourseNames.length?`<div>New Course(s): ${p.newCourseNames.map(esc).join(', ')}</div>`:''}
+  ${p.newCategoryNames.length?`<div>New Load Category(ies): ${p.newCategoryNames.map(esc).join(', ')}</div>`:''}
+  ${p.newSectionCombos.length?`<div>New Section(s): ${p.newSectionCombos.map(c=>esc(`${c.year} · ${c.course} · ${c.section}`)).join(', ')}</div>`:''}
+ </div>`:`<div class="al g">Every row matches a Year, Course, Section and Category that already exists — nothing new will be created.</div>`}
+ ${p.badRows.length?`<div class="tw"><table><tr><th>Sheet row</th><th>Reason will be skipped</th></tr>${p.badRows.map(r=>`<tr><td>${r.row}</td><td>${esc(r.msg)}</td></tr>`).join('')}</table></div>`:''}
+ <div class="row">${p.validGroups.length?`<button onclick="confirmImport()">Confirm import (${p.validGroups.length} record${p.validGroups.length===1?'':'s'})</button>`:''} <button class="sec" onclick="cancelImportPreview()">Cancel</button></div></div>`}
+function importResultsV(){const{ok,fail,created}=impSummary,badRows=impResults.filter(r=>!r.ok);
+ return`<div class="card"><b>Import results</b>
+ <div class="row"><span class="tag ok">${ok} record(s) imported</span>${fail?`<span class="tag b">${fail} row(s) skipped</span>`:''}${created.years||created.courses||created.sections||created.categories?`<span class="tag">${created.years} new Year(s), ${created.courses} new Course(s), ${created.categories} new Categor${created.categories===1?'y':'ies'}, ${created.sections} new Section(s) created</span>`:''}</div>
+ ${badRows.length?`<div class="tw"><table><tr><th>Sheet row</th><th>Reason skipped</th></tr>${badRows.map(r=>`<tr><td>${r.row}</td><td>${esc(r.msg)}</td></tr>`).join('')}</table></div>`:'<div class="mut">All rows imported successfully.</div>'}
+ </div>`}
+/* ---------- CALENDAR / OFF DAYS ---------- */
+const monthLabel=k=>new Date(k+'T12:00:00').toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+const shiftMonth=(k,n)=>{const x=new Date(k+'T12:00:00');x.setMonth(x.getMonth()+n,1);return iso(x)};
+function monthGrid(monthKey,visibleFn,who){
+ const first=new Date(monthKey+'T12:00:00'),dow=(first.getDay()+6)%7,days=new Date(first.getFullYear(),first.getMonth()+1,0).getDate();
+ const cells=[];for(let i=0;i<dow;i++)cells.push('<div class="calday blank"></div>');
+ for(let d=1;d<=days;d++){const ds=monthKey.slice(0,8)+String(d).padStart(2,'0'),hs=S.holidays.filter(h=>h.date===ds).filter(visibleFn),wo=new Date(ds+'T12:00:00').getDay()===S.weeklyOff;
+  const g=hs.some(h=>h.sectionId==null),s=hs.some(h=>h.sectionId!=null);
+  const reasonTxt=hs.map(h=>h.label).join('; ');
+  const cls=g?'off-g':(s?'off-s':(wo?'wo':''));
+  cells.push(`<div class="calday ${cls}" onclick="dayClick('${ds}','${who}')" title="${wo?'Weekly off — ':''}${hs.map(h=>esc((h.sectionId?nm2('sections',h.sectionId):'All departments')+': '+h.label)).join(' | ')}"><div class="dn">${d}</div>${wo&&!hs.length?'<div class="wolbl">Off</div>':''}${hs.length?`<div class="reason">${esc(reasonTxt)}</div>`:''}</div>`)}
+ while(cells.length%7)cells.push('<div class="calday blank"></div>');
+ return`<div class="calgrid">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<div class="calhd">${d}</div>`).join('')}${cells.join('')}</div>
+ <div class="legend"><span><span class="swatch g"></span> All departments (admin)</span><span><span class="swatch s"></span> Department-specific</span><span>Dashed = weekly off (${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][S.weeklyOff]})</span><span>Click a day to select its date below</span></div>`}
+function dayClick(date,who){$('#h_date').value=date;const list=S.holidays.filter(h=>h.date===date).filter(who==='admin'?()=>true:h=>h.sectionId==null||S.sections.some(s=>s.id===h.sectionId&&s.headId===me.id));
+ if(list.length)toast(list.map(h=>(h.sectionId?nm2('sections',h.sectionId):'All departments')+': '+h.label).join(' • '))}
+async function addHolidayRange(sectionId){
+ if(sectionId!==null&&!sectionId)return toast('Select a section',1);
+ const from=$('#h_date').value,to=$('#h_to').value||from,l=$('#h_label').value.trim();
+ if(!from||!l)return toast('Select a date and enter a reason',1);
+ if(to<from)return toast('The "To" date must be on or after the "From" date',1);
+ const start=new Date(from+'T12:00:00'),end=new Date(to+'T12:00:00');
+ const span=Math.round((end-start)/86400000)+1;
+ if(span>60)return toast('That range is over 60 days — please double-check the dates',1);
+ let added=0,skipExisting=0,skipWeekly=0;
+ for(let i=0;i<span;i++){const d=new Date(start);d.setDate(d.getDate()+i);const ds=iso(d);
+  if(d.getDay()===S.weeklyOff){skipWeekly++;continue}
+  if(S.holidays.some(h=>h.date===ds&&h.sectionId===sectionId)){skipExisting++;continue}
+  S.holidays.push({id:uid(),date:ds,label:l,sectionId,by:me.id,ts:Date.now()});added++}
+ if(!added)return toast('Nothing new to add — every day in that range is already marked, or is your weekly off day',1);
+ await save();
+ let msg=`Marked ${added} day${added===1?'':'s'} off`+(sectionId===null?' for all departments':'');
+ if(skipExisting||skipWeekly)msg+=` (skipped ${skipExisting} already marked, ${skipWeekly} on your weekly off day)`;
+ toast(msg);$('#h_label').value='';$('#h_to').value='';render()}
+async function delHoliday(id){const h=S.holidays.find(x=>x.id===id);if(!h)return;
+ if(me.role!=='admin'){if(h.sectionId==null)return toast('Only admin can remove an all-department off day',1);const s=S.sections.find(x=>x.id===h.sectionId);if(!s||s.headId!==me.id)return toast('You can only remove off days for your own sections',1)}
+ S.holidays=S.holidays.filter(x=>x.id!==id);await save();toast('Off day removed');render()}
+async function saveEditHoliday(id){const h=S.holidays.find(x=>x.id===id);if(!h)return;
+ if(me.role!=='admin'){if(h.sectionId==null)return toast('Only admin can edit an all-department off day',1);const s=S.sections.find(x=>x.id===h.sectionId);if(!s||s.headId!==me.id)return toast('You can only edit off days for your own sections',1)}
+ const d=$('#eh_date').value,l=$('#eh_label').value.trim();
+ if(!d||!l)return toast('Select a date and enter a reason',1);
+ if(S.holidays.some(x=>x.id!==id&&x.date===d&&x.sectionId===h.sectionId))return toast('This date is already marked off',1);
+ h.date=d;h.label=l;edHol='';await save();toast('Off day updated');render()}
+function calendarV(){const adm=me.role==='admin';
+ const nav=`<div class="row"><button class="sec" onclick="calMonth=shiftMonth(calMonth,-1);render()">‹ Prev</button><b>${monthLabel(calMonth)}</b><button class="sec" onclick="calMonth=shiftMonth(calMonth,1);render()">Next ›</button></div>`;
+ if(adm){
+  const list=S.holidays.slice().sort((a,b)=>a.date<b.date?-1:1),dn=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  return`<div class="al g">Off days marked here are for information and remarks context; hours already planned are not changed automatically.</div>
+  <div class="card"><div class="row"><b>Weekly off day (applies to all departments):</b><select onchange="setWeeklyOff(this.value)">${dn.map((n,i)=>`<option value="${i}" ${i==S.weeklyOff?'selected':''}>${n}</option>`).join('')}</select></div>
+  <div class="row"><b>Term start (earliest week in dropdowns):</b><input type="date" id="ts_date" value="${S.termStart}"><button class="sec" onclick="setTermStart()">Save</button></div></div>
+  <div class="card">${nav}${monthGrid(calMonth,()=>true,'admin')}</div>
+  <div class="card"><b>Mark off day(s) for all departments</b><p class="mut">Leave "To" blank for a single day, or fill both for a range — e.g. a multi-day sessional exam or festival break.</p>
+  <div class="row">From <input type="date" id="h_date"> To (optional) <input type="date" id="h_to"><input id="h_label" placeholder="Reason (e.g. Diwali, Sessional Exam Week)"><button onclick="addHolidayRange(null)">Mark off day(s)</button></div></div>
+  <div class="card"><b>All off days</b><div class="tw"><table><tr><th>Date</th><th>Reason</th><th>Scope</th><th></th></tr>${list.map(h=>edHol===h.id?
+   `<tr><td><input type="date" id="eh_date" value="${h.date}"></td><td><input id="eh_label" value="${esc(h.label)}"></td><td>${h.sectionId?nm2('sections',h.sectionId):'<span class="tag ok">All departments</span>'}</td>
+    <td><button onclick="saveEditHoliday('${h.id}')">Save</button> <button class="sec" onclick="edHol='';render()">Cancel</button></td></tr>`
+   :`<tr><td>${fmt2(h.date)}</td><td>${esc(h.label)}</td><td>${h.sectionId?nm2('sections',h.sectionId):'<span class="tag ok">All departments</span>'}</td><td><button class="sec" onclick="edHol='${h.id}';render()">Edit</button> <button class="dng" onclick="delHoliday('${h.id}')">Delete</button></td></tr>`).join('')||'<tr><td colspan=4 class="mut">None marked yet</td></tr>'}</table></div></div>`}
+ const mine=S.sections.filter(s=>s.headId===me.id);
+ if(!mine.length)return`<div class="al w">No sections are mapped to you yet. Please contact the admin.</div>`;
+ const own=S.holidays.filter(h=>h.sectionId&&mine.some(s=>s.id===h.sectionId)).sort((a,b)=>a.date<b.date?-1:1);
+ const glob=S.holidays.filter(h=>h.sectionId==null).sort((a,b)=>a.date<b.date?-1:1);
+ const vis=h=>h.sectionId==null||mine.some(s=>s.id===h.sectionId);
+ return`<div class="al g">Every ${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][S.weeklyOff]} is off for all departments (set by admin). Mark event days or extra holidays for your section(s) below.</div>
+ <div class="card">${nav}${monthGrid(calMonth,vis,'head')}</div>
+ <div class="card"><b>Mark off day(s) for your section</b><p class="mut">Leave "To" blank for a single day, or fill both for a range — e.g. a multi-day sessional exam.</p>
+ <div class="row">${mine.length>1?`<select id="h_sec">${mine.map(s=>`<option value="${s.id}">${secLabel(s)}</option>`).join('')}</select>`:''}From <input type="date" id="h_date"> To (optional) <input type="date" id="h_to"><input id="h_label" placeholder="Reason (e.g. Sports Day, Seminar)"><button onclick="addHolidayRange(${mine.length>1?"$('#h_sec').value":`'${mine[0].id}'`})">Mark off day(s)</button></div></div>
+ <div class="card"><b>Your section off days</b><div class="tw"><table><tr><th>Date</th><th>Section</th><th>Reason</th><th></th></tr>${own.map(h=>edHol===h.id?
+  `<tr><td><input type="date" id="eh_date" value="${h.date}"></td><td>${nm2('sections',h.sectionId)}</td><td><input id="eh_label" value="${esc(h.label)}"></td>
+   <td><button onclick="saveEditHoliday('${h.id}')">Save</button> <button class="sec" onclick="edHol='';render()">Cancel</button></td></tr>`
+  :`<tr><td>${fmt2(h.date)}</td><td>${nm2('sections',h.sectionId)}</td><td>${esc(h.label)}</td><td><button class="sec" onclick="edHol='${h.id}';render()">Edit</button> <button class="dng" onclick="delHoliday('${h.id}')">Delete</button></td></tr>`).join('')||'<tr><td colspan=4 class="mut">None marked yet</td></tr>'}</table></div></div>
+ <div class="card"><b>All-department off days (set by admin)</b><div class="tw"><table><tr><th>Date</th><th>Reason</th></tr>${glob.map(h=>`<tr><td>${fmt2(h.date)}</td><td>${esc(h.label)}</td></tr>`).join('')||'<tr><td colspan=2 class="mut">None</td></tr>'}</table></div></div>`}
+async function setWeeklyOff(v){S.weeklyOff=parseInt(v,10);await save();toast('Weekly off day updated for all departments');render()}
+async function setTermStart(){const v=$('#ts_date').value;if(!v)return toast('Pick a date',1);S.termStart=v;await save();toast('Term start updated');render()}
+const fmt2=d=>new Date(d+'T12:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+/* ---------- ADMIN ---------- */
+function adminHome(){const weeks=[];for(let w=iso(mon(S.termStart));w<=addW(CUR,1);w=addW(w,1))weeks.push(w);
+ if(ovYear&&!S.years.find(y=>y.id===ovYear))ovYear='';
+ if(ovCourse&&!S.courses.find(c=>c.id===ovCourse))ovCourse='';
+ if(ovHead&&!S.users.find(u=>u.id===ovHead))ovHead='';
+ let list=S.sections.filter(s=>(!ovYear||s.yearId===ovYear)&&(!ovCourse||s.courseId===ovCourse)&&(!ovHead||s.headId===ovHead));
+ if(ovStatus)list=list.filter(s=>status(s.id,ow)[0]===ovStatus);
+ if(ovSearch){const q=ovSearch.toLowerCase();list=list.filter(s=>{const hd=S.users.find(u=>u.id===s.headId);return secLabel(s).toLowerCase().includes(q)||(hd&&hd.name.toLowerCase().includes(q))})}
+ const cats=S.categories;
+ const rows=list.map(s=>{const st=status(s.id,ow),p=S.plans[K(s.id,ow)]||{},a=S.actuals[K(s.id,ow)]||{},ph=p.hours||{},ah=a.hours||{},u=unl(s.id,ow),hd=S.users.find(x=>x.id===s.headId),id=s.id;
+ if(edRec===id){
+  const inputs=cats.map(c=>`<td><input type="number" min="0" max="${MAXH}" step="0.5" id="er_p_${c.id}" value="${ph[c.id]??''}" style="width:60px"></td><td><input type="number" min="0" max="${MAXH}" step="0.5" id="er_a_${c.id}" value="${ah[c.id]??''}" style="width:60px"></td>`).join('');
+  return`<tr><td>${secLabel(s)}</td><td>${hd?esc(hd.name):'<span class="tag b">Unmapped</span>'}</td>
+  ${inputs}
+  <td colspan="2"><textarea id="er_rm" placeholder="Remark">${esc(a.remark||'')}</textarea></td>
+  <td><button onclick="saveRecord('${id}')">Save</button> <button class="sec" onclick="edRec='';render()">Cancel</button></td></tr>`}
+ const pa2=(x,y)=>x==null?'<span class="mut">—</span>':`${x.toFixed(1)}${y!=null&&x<y?' <span style="color:var(--bad)">⚠</span>':''}`;
+ const dataCells=cats.map(c=>`<td>${ph[c.id]!=null?ph[c.id]:'<span class="mut">—</span>'}</td><td>${pa2(ah[c.id],ph[c.id])}</td>`).join('');
+ return`<tr><td>${secLabel(s)}</td><td>${hd?esc(hd.name):'<span class="tag b">Unmapped</span>'}</td>
+ ${dataCells}
+ <td><span class="tag ${st[1]}">${st[0]}</span></td><td class="mut">${esc(a.remark||'')}</td>
+ <td>${ow<CUR&&ow!==LAST||ow===LAST?`<button class="${u?'dng':'sec'}" onclick="toggleUnlock('${s.id}')">${u?'Lock':'Unlock'}</button>`:''} <button class="sec" onclick="edRec='${id}';render()">Edit</button> ${(hasAny(ph)||hasAny(ah))?`<button class="dng" onclick="deleteRecord('${id}')">Delete</button>`:''}</td></tr>`}).join('');
+ const late=S.sections.filter(s=>{const x=status(s.id,LAST)[0];return x==='Actual pending'||x==='Not planned'}).length;
+ const heads=S.users.filter(u=>u.role==='head'&&u.active);
+ const statuses=['Completed','Shortfall','Actual pending','Planned','Not planned'];
+ const catHeadCells=cats.map(c=>`<th>Plan ${esc(c.name)} (h)</th><th>Actual ${esc(c.name)} (h)</th>`).join('');
+ if(!cats.length)return`<div class="al w">No Load Categories have been set up yet. Go to Admin \u2192 Load Categories to add at least one (e.g. Academic, CCPD Training) before heads can plan weekly load.</div>`;
+ return`${late?`<div class="al b">${late} section(s) have not completed last week's (${fmt(LAST)}) entry.</div>`:'<div class="al g">All sections are up to date for last week.</div>'}
+ <div class="card"><div class="row"><b>Week:</b><select onchange="ow=this.value;render()">${weeks.map(w=>`<option value="${w}" ${w===ow?'selected':''}>${fmt(w)}${w===CUR?' (This week)':w===LAST?' (Last week)':''}</option>`).join('')}</select><span class="mut">Unlock lets the head edit plan and actual for that section-week. Lock it again when done.</span></div>
+ <div class="row"><input id="ovq" placeholder="Search section or head…" value="${esc(ovSearch)}" oninput="ovSearch=this.value;render()" style="min-width:200px">
+ <select onchange="ovYear=this.value;render()"><option value="">All years</option>${S.years.map(y=>`<option value="${y.id}" ${y.id===ovYear?'selected':''}>${esc(y.name)}</option>`).join('')}</select>
+ <select onchange="ovCourse=this.value;render()"><option value="">All courses</option>${S.courses.map(c=>`<option value="${c.id}" ${c.id===ovCourse?'selected':''}>${esc(c.name)}</option>`).join('')}</select>
+ <select onchange="ovHead=this.value;render()"><option value="">All heads</option>${heads.map(u=>`<option value="${u.id}" ${u.id===ovHead?'selected':''}>${esc(u.name)}</option>`).join('')}</select>
+ <select onchange="ovStatus=this.value;render()"><option value="">All statuses</option>${statuses.map(x=>`<option value="${x}" ${x===ovStatus?'selected':''}>${x}</option>`).join('')}</select>
+ ${(ovYear||ovCourse||ovHead||ovStatus||ovSearch)?`<button class="sec" onclick="ovYear='';ovCourse='';ovHead='';ovStatus='';ovSearch='';render()">Clear filters</button>`:''}</div>
+ <div class="tw"><table><tr><th>Section</th><th>Head</th>${catHeadCells}<th>Status</th><th>Remark</th><th>Access</th></tr>${rows||`<tr><td colspan=${5+cats.length*2} class="mut">${S.sections.length?'No section matches this filter.':'No sections yet. Add them in Section Mapping.'}</td></tr>`}</table></div></div>`}
+async function toggleUnlock(id){const k=K(id,ow);if(S.unlocks[k])delete S.unlocks[k];else S.unlocks[k]=true;await save();render()}
+async function saveRecord(id){const ph={},ah={};let phHas=false,ahHas=false,badRange=false;
+ S.categories.forEach(c=>{
+  const pv=$('#er_p_'+c.id).value,av=$('#er_a_'+c.id).value;
+  if(pv!==''){const v=parseFloat(pv);if(isNaN(v)||v<0||v>MAXH)badRange=true;else{ph[c.id]=v;phHas=true}}
+  if(av!==''){const v=parseFloat(av);if(isNaN(v)||v<0||v>MAXH)badRange=true;else{ah[c.id]=v;ahHas=true}}
+ });
+ if(badRange)return toast(`Hours must be between 0 and ${MAXH}`,1);
+ const rm=$('#er_rm').value.trim();
+ if(phHas&&ahHas&&(catSum(ah)<catSum(ph))&&rm.length<5)return toast('Combined Actual hours are below combined Planned — a remark (5+ characters) is required',1);
+ const k=K(id,ow);
+ if(phHas)S.plans[k]={hours:ph,by:me.id,ts:Date.now()};else delete S.plans[k];
+ if(ahHas)S.actuals[k]={hours:ah,remark:rm,by:me.id,ts:Date.now()};else delete S.actuals[k];
+ edRec='';await save();toast('Record updated');render()}
+async function deleteRecord(id){if(!confirm('Delete the planned and actual load for this section and week? This cannot be undone.'))return;
+ const k=K(id,ow);delete S.plans[k];delete S.actuals[k];await save();toast('Record deleted');render()}
+let edIt='',edSec='',edUsr='';
+function master(kind,label){const inUse=id=>S.sections.some(s=>(kind==='years'?s.yearId:s.courseId)===id);
+ return`<div class="card"><div class="row"><input id="mn" placeholder="New ${label} name"><button onclick="addM('${kind}')">Add</button></div><table>${S[kind].map(x=>edIt===kind+':'+x.id?
+  `<tr><td><input id="ed_${x.id}" value="${esc(x.name)}" style="width:100%"></td><td style="width:150px"><button onclick="saveEditMaster('${kind}','${x.id}')">Save</button> <button class="sec" onclick="edIt='';render()">Cancel</button></td></tr>`
+  :`<tr><td>${esc(x.name)}</td><td style="width:150px"><button class="sec" onclick="edIt='${kind}:${x.id}';render()">Edit</button> <button class="dng" onclick="delM('${kind}','${x.id}')">Delete</button></td></tr>`).join('')||'<tr><td class="mut">None yet</td></tr>'}</table></div>`}
+async function addM(kind){const n=$('#mn').value.trim();if(!n)return toast('Name is required',1);if(S[kind].some(x=>x.name.toLowerCase()===n.toLowerCase()))return toast('Already exists',1);S[kind].push({id:uid(),name:n});await save();render()}
+async function saveEditMaster(kind,id){const v=$('#ed_'+id).value.trim();if(!v)return toast('Name is required',1);
+ if(S[kind].some(x=>x.id!==id&&x.name.toLowerCase()===v.toLowerCase()))return toast('Already exists',1);
+ S[kind].find(x=>x.id===id).name=v;edIt='';await save();toast('Updated');render()}
+function kindInUse(kind,id){if(kind==='years')return S.sections.some(s=>s.yearId===id);
+ if(kind==='courses')return S.sections.some(s=>s.courseId===id)||S.users.some(u=>u.courseId===id);
+ if(kind==='categories')return[...Object.values(S.plans),...Object.values(S.actuals)].some(r=>r.hours&&Object.prototype.hasOwnProperty.call(r.hours,id));
+ return false}
+async function delM(kind,id){if(kindInUse(kind,id))return toast('In use — cannot delete',1);S[kind]=S[kind].filter(x=>x.id!==id);await save();render()}
+function usersV(){const cOpt=(sel)=>`<option value="">Select course…</option>${S.courses.map(c=>`<option value="${c.id}" ${c.id===sel?'selected':''}>${esc(c.name)}</option>`).join('')}`;
+ const addRole=$('#ur')?.value||'head';
+ const q=usrSearch.toLowerCase();
+ const list=S.users.filter(u=>u.id===edUsr||!q||u.name.toLowerCase().includes(q)||u.username.toLowerCase().includes(q)||(u.courseId&&nm('courses',u.courseId).toLowerCase().includes(q)));
+ return`<div class="card"><div class="row"><input id="un" placeholder="Full name"><input id="uu" placeholder="Username"><input id="up" type="password" placeholder="Password (min 6)"><select id="ur" onchange="render()"><option value="head" ${addRole==='head'?'selected':''}>Dept. Head</option><option value="admin" ${addRole==='admin'?'selected':''}>Admin</option></select>${addRole==='head'?`<select id="urc">${cOpt('')}</select>`:''}<button onclick="addU()">Add user</button></div>
+ <div class="mut">A Department Head must be mapped to a course when created. You can change this later using Edit.</div>
+ <div class="row"><input placeholder="Search name, username or course…" value="${esc(usrSearch)}" oninput="usrSearch=this.value;render()" style="min-width:220px">${usrSearch?`<button class="sec" onclick="usrSearch='';render()">Clear</button>`:''}</div>
+ <div class="tw"><table><tr><th>Name</th><th>Username</th><th>Role</th><th>Course</th><th>Status</th><th>New password</th><th></th></tr>${list.map(u=>edUsr===u.id?
+  `<tr><td><input id="eu_n_${u.id}" value="${esc(u.name)}"></td><td><input id="eu_u_${u.id}" value="${esc(u.username)}"></td>
+   <td><select id="eu_r_${u.id}" onchange="render()">${['head','admin'].map(r=>`<option value="${r}" ${r===u.role?'selected':''}>${r==='head'?'Dept. Head':'Admin'}</option>`).join('')}</select></td>
+   <td>${($('#eu_r_'+u.id)?.value||u.role)==='head'?`<select id="eu_c_${u.id}">${cOpt(u.courseId)}</select>`:'<span class="mut">—</span>'}</td>
+   <td colspan="2"><button onclick="saveEditUser('${u.id}')">Save</button> <button class="sec" onclick="edUsr='';render()">Cancel</button></td><td></td></tr>`
+  :`<tr><td>${esc(u.name)}</td><td>${esc(u.username)}</td><td>${u.role==='head'?'Dept. Head':'Admin'}</td>
+   <td>${u.role==='head'?(u.courseId?esc(nm('courses',u.courseId)):'<span class="tag b">Not mapped</span>'):'<span class="mut">—</span>'}</td>
+   <td><span class="tag ${u.active?'ok':'b'}">${u.active?'Active':'Disabled'}</span></td>
+   <td><input type="password" id="pw_${u.id}" placeholder="••••••"> <button class="sec" onclick="setPw('${u.id}')">Set</button></td>
+   <td><button class="sec" onclick="edUsr='${u.id}';render()">Edit</button> <button class="sec" onclick="togU('${u.id}')">${u.active?'Disable':'Enable'}</button></td></tr>`).join('')||`<tr><td colspan=7 class="mut">No user matches this search.</td></tr>`}</table></div></div>`}
+async function addU(){const n=$('#un').value.trim(),u=$('#uu').value.trim(),p=$('#up').value,r=$('#ur').value,c=$('#urc')?.value||'';
+ if(!n||!u||p.length<6)return toast('Name, username and a password of 6+ characters are required',1);
+ if(S.users.some(x=>x.username.toLowerCase()===u.toLowerCase()))return toast('Username already taken',1);
+ if(r==='head'&&!c)return toast('Select a course to map this Department Head to',1);
+ S.users.push({id:uid(),name:n,username:u,password:p,role:r,courseId:r==='head'?c:null,active:true});await save();render()}
+async function saveEditUser(id){const n=$('#eu_n_'+id).value.trim(),u=$('#eu_u_'+id).value.trim(),r=$('#eu_r_'+id).value,c=$('#eu_c_'+id)?.value||'';
+ if(!n||!u)return toast('Name and username are required',1);
+ if(S.users.some(x=>x.id!==id&&x.username.toLowerCase()===u.toLowerCase()))return toast('Username already taken',1);
+ if(r==='head'&&!c)return toast('Select a course to map this Department Head to',1);
+ const usr=S.users.find(x=>x.id===id);usr.name=n;usr.username=u;usr.role=r;usr.courseId=r==='head'?c:null;
+ edUsr='';await save();toast('User updated');render()}
+async function setPw(id){const p=$('#pw_'+id).value;if(p.length<6)return toast('Password must be 6+ characters',1);S.users.find(u=>u.id===id).password=p;await save();toast('Password updated');render()}
+async function togU(id){const u=S.users.find(x=>x.id===id);if(u.id===me.id)return toast('You cannot disable your own account',1);u.active=!u.active;await save();render()}
+function secV(){const heads=S.users.filter(u=>u.role==='head'&&u.active),opt=(l,sel)=>l.map(x=>`<option value="${x.id}" ${x.id===sel?'selected':''}>${esc(x.name)}</option>`).join('');
+ const q=secSearch.toLowerCase();
+ const list=S.sections.filter(s=>{if(s.id===edSec)return true;if(!q)return true;const hd=S.users.find(u=>u.id===s.headId);
+  return nm('years',s.yearId).toLowerCase().includes(q)||nm('courses',s.courseId).toLowerCase().includes(q)||s.name.toLowerCase().includes(q)||(hd&&hd.name.toLowerCase().includes(q))});
+ return`<div class="card"><div class="row"><select id="sy"><option value="">Year…</option>${opt(S.years)}</select><select id="sc"><option value="">Course…</option>${opt(S.courses)}</select><input id="sn" placeholder="Section (e.g. A)" style="width:130px"><select id="sh"><option value="">Head…</option>${opt(heads)}</select><button onclick="addS()">Add mapping</button></div>
+ <div class="row"><input placeholder="Search year, course, section or head…" value="${esc(secSearch)}" oninput="secSearch=this.value;render()" style="min-width:220px">${secSearch?`<button class="sec" onclick="secSearch='';render()">Clear</button>`:''}</div>
+ <div class="tw"><table><tr><th>Year</th><th>Course</th><th>Section</th><th>Department Head</th><th></th></tr>${list.map(s=>edSec===s.id?
+  `<tr><td><select id="es_y_${s.id}">${opt(S.years,s.yearId)}</select></td><td><select id="es_c_${s.id}">${opt(S.courses,s.courseId)}</select></td><td><input id="es_n_${s.id}" value="${esc(s.name)}"></td>
+   <td><select id="es_h_${s.id}"><option value="">Unmapped</option>${opt(heads,s.headId)}</select></td>
+   <td><button onclick="saveEditSection('${s.id}')">Save</button> <button class="sec" onclick="edSec='';render()">Cancel</button></td></tr>`
+  :`<tr><td>${nm('years',s.yearId)}</td><td>${nm('courses',s.courseId)}</td><td>${esc(s.name)}</td><td><select onchange="remap('${s.id}',this.value)"><option value="">Unmapped</option>${opt(heads,s.headId)}</select></td>
+   <td><button class="sec" onclick="edSec='${s.id}';render()">Edit</button> <button class="dng" onclick="delS('${s.id}')">Delete</button></td></tr>`).join('')||`<tr><td colspan=5 class="mut">${S.sections.length?'No section matches this search.':'No sections yet'}</td></tr>`}</table></div></div>`}
+async function addS(){const y=$('#sy').value,c=$('#sc').value,n=$('#sn').value.trim(),h=$('#sh').value;
+ if(!y||!c||!n||!h)return toast('Select year, course, head and enter a section name',1);
+ if(S.sections.some(s=>s.yearId===y&&s.courseId===c&&s.name.toLowerCase()===n.toLowerCase()))return toast('This section already exists',1);
+ S.sections.push({id:uid(),name:n,yearId:y,courseId:c,headId:h});await save();render()}
+async function saveEditSection(id){const y=$('#es_y_'+id).value,c=$('#es_c_'+id).value,n=$('#es_n_'+id).value.trim(),h=$('#es_h_'+id).value;
+ if(!y||!c||!n)return toast('Select year, course and enter a section name',1);
+ if(S.sections.some(s=>s.id!==id&&s.yearId===y&&s.courseId===c&&s.name.toLowerCase()===n.toLowerCase()))return toast('This section already exists',1);
+ const s=S.sections.find(x=>x.id===id);s.yearId=y;s.courseId=c;s.name=n;s.headId=h;edSec='';await save();toast('Section updated');render()}
+async function remap(id,h){S.sections.find(s=>s.id===id).headId=h;await save();toast('Head updated')}
+async function delS(id){if(Object.keys(S.plans).some(k=>k.startsWith(id+'|')))return toast('Section has recorded data — reassign the head instead of deleting',1);S.sections=S.sections.filter(s=>s.id!==id);await save();render()}
+/* ---------- HEAD MAPPING ---------- */
+function mapV(){const heads=S.users.filter(u=>u.role==='head'&&u.active);
+ if(!heads.find(x=>x.id===mh))mh=heads[0]?.id||'';
+ if(!heads.length)return`<div class="al w">Create Dept. Head users first (Users tab).</div>`;
+ if(!S.sections.length)return`<div class="al w">Add sections first (Sections tab).</div>`;
+ const sum=heads.map(u=>{const ss=S.sections.filter(s=>s.headId===u.id),ys=[...new Set(ss.map(s=>nm('years',s.yearId)))];
+  return`<tr><td>${esc(u.name)}</td><td>${ys.join(', ')||'—'}</td><td>${ss.length}</td></tr>`}).join('');
+ const grp=S.years.map(y=>{const ss=S.sections.filter(s=>s.yearId===y.id);if(!ss.length)return'';
+  return`<div style="margin-bottom:10px"><div class="row"><b>${esc(y.name)}</b><button class="sec" onclick="assignYear('${y.id}')">Assign whole year</button></div>${ss.map(s=>{const o=S.users.find(u=>u.id===s.headId);
+  return`<label style="display:block;padding:3px 0"><input type="checkbox" ${s.headId===mh?'checked':''} onchange="assignS('${s.id}',this.checked)"> ${nm('courses',s.courseId)} · ${esc(s.name)} ${o&&o.id!==mh?`<span class="mut">(currently ${esc(o.name)})</span>`:''}</label>`}).join('')}</div>`}).join('');
+ return`<div class="al g">Each head sees and edits only the sections mapped to them. Others' entries stay hidden; only ranks and percentages appear on the leaderboard.</div>
+ <div class="card"><div class="row"><b>Department Head:</b><select onchange="mh=this.value;render()">${heads.map(u=>`<option value="${u.id}" ${u.id===mh?'selected':''}>${esc(u.name)}</option>`).join('')}</select></div>${grp}</div>
+ <div class="card"><b>Mapping summary</b><div class="tw"><table><tr><th>Head</th><th>Years</th><th>Sections</th></tr>${sum}</table></div></div>`}
+async function assignS(id,on){S.sections.find(s=>s.id===id).headId=on?mh:'';await save();toast(on?'Section assigned':'Section unassigned');render()}
+async function assignYear(y){S.sections.filter(s=>s.yearId===y).forEach(s=>s.headId=mh);await save();toast('Year assigned');render()}
+/* ---------- LEADERBOARD ---------- */
+function lbV(){const ok=w=>isReasonableWeekKey(w)&&w<CUR&&(lbp==='all'||(lbp==='last'?w===LAST:w>=addW(CUR,-4))),sc={};
+ Object.keys(S.plans).forEach(k=>{const[sid,w]=k.split('|');if(!ok(w))return;const p=S.plans[k],a=S.actuals[k],o=sc[sid]=sc[sid]||{p:0,c:0,n:0,s:0};const pt=catSum(p.hours);o.p+=pt;o.n++;if(a){o.s++;o.c+=Math.min(catSum(a.hours),pt)}});
+ const fin=(name,o,mine)=>({name,mine,p:o.p,c:o.c,n:o.n,s:o.s,pct:o.p?o.c/o.p*100:0,sub:o.n?o.s/o.n*100:0});
+ const heads=S.users.filter(u=>u.role==='head'&&u.active).map(u=>{const t={p:0,c:0,n:0,s:0};S.sections.filter(s=>s.headId===u.id).forEach(s=>{const o=sc[s.id];if(o){t.p+=o.p;t.c+=o.c;t.n+=o.n;t.s+=o.s}});return fin(u.name,t,u.id===me.id)});
+ const secs=S.sections.filter(s=>sc[s.id]).map(s=>fin(secLabel(s),sc[s.id],s.headId===me.id));
+ const srt=a=>a.filter(x=>x.n).sort((a,b)=>b.pct-a.pct||b.sub-a.sub);
+ const med=['🥇','🥈','🥉'],bar=x=>`<div style="background:var(--bd);border-radius:99px;height:8px;min-width:90px"><div style="width:${Math.min(100,x)}%;height:8px;border-radius:99px;background:var(--pri)"></div></div>`;
+ const tbl=(a,t,adm)=>`<div class="card"><b>${t}</b><div class="tw"><table><tr><th>#</th><th>Name</th><th>Load covered</th><th></th><th>Entries submitted</th>${adm?'<th>Planned h</th><th>Actual h</th>':''}</tr>${srt(a).map((x,i)=>`<tr ${x.mine?'style="background:var(--gbg)"':''}><td>${med[i]||i+1}</td><td>${x.name}${x.mine?' <span class="tag ok">You</span>':''}</td><td><b>${x.pct.toFixed(1)}%</b></td><td>${bar(x.pct)}</td><td>${x.s}/${x.n}</td>${adm?`<td>${x.p}</td><td>${x.c.toFixed(1)}</td>`:''}</tr>`).join('')||'<tr><td colspan=7 class="mut">No completed weeks in this period yet.</td></tr>'}</table></div></div>`;
+ const adm=me.role==='admin';
+ return`<div class="card"><div class="row"><b>Period:</b><select onchange="lbp=this.value;render()"><option value="last" ${lbp==='last'?'selected':''}>Last week</option><option value="4w" ${lbp==='4w'?'selected':''}>Last 4 weeks</option><option value="all" ${lbp==='all'?'selected':''}>All time</option></select>
+ <span class="mut">Load covered = hours delivered (capped at plan) ÷ planned hours, Academic + Training. Missing entries count as 0. Ties are broken by submission rate.</span></div></div>
+ ${tbl(heads,'Department Head ranking',adm)}${tbl(secs,'Section ranking',adm)}`}
+boot();
+</script></body></html>
