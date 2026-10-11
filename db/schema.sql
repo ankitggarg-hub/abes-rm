@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS floors (
 CREATE TABLE IF NOT EXISTS venues (
   id          text PRIMARY KEY,
   name        text NOT NULL UNIQUE,
-  type        text NOT NULL CHECK (type IN ('Lecture theatre','Computer lab','Seminar hall','Auditorium','Conference hall','Core lab')),
+  type        text NOT NULL CHECK (type IN ('Lecture theatre','Computer lab','Seminar hall','Auditorium','Conference hall','Core lab','Tutorial room')),
   building_id text NOT NULL REFERENCES buildings(id) ON DELETE RESTRICT,
   floor_id    text NOT NULL REFERENCES floors(id)    ON DELETE RESTRICT,
   capacity    int  NOT NULL CHECK (capacity > 0),
@@ -110,4 +110,4 @@ CREATE TABLE IF NOT EXISTS login_attempts (
 
 -- Venue types: add 'Conference hall' and 'Core lab' (safe to re-run)
 ALTER TABLE venues DROP CONSTRAINT IF EXISTS venues_type_check;
-ALTER TABLE venues ADD CONSTRAINT venues_type_check CHECK (type IN ('Lecture theatre','Computer lab','Seminar hall','Auditorium','Conference hall','Core lab'));
+ALTER TABLE venues ADD CONSTRAINT venues_type_check CHECK (type IN ('Lecture theatre','Computer lab','Seminar hall','Auditorium','Conference hall','Core lab','Tutorial room'));
