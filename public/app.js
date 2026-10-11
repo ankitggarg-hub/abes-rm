@@ -4,8 +4,8 @@
 /* ---------- constants & helpers ---------- */
 var DAYS=['Mon','Tue','Wed','Thu','Fri','Sat'];
 var DAYF=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-var TYPES=['Lecture theatre','Computer lab','Seminar hall','Auditorium'];
-var TC={'Lecture theatre':'LT','Computer lab':'LAB','Seminar hall':'SH','Auditorium':'AUD'};
+var TYPES=['Lecture theatre','Computer lab','Seminar hall','Auditorium','Conference hall','Core lab'];
+var TC={'Lecture theatre':'LT','Computer lab':'LAB','Seminar hall':'SH','Auditorium':'AUD','Conference hall':'CONF','Core lab':'CORE'};
 var ROLE={admin:'Administrator',hod:'Department head',head:'Head of institute',stakeholder:'Stakeholder'};
 var esc=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})};
 var z2=function(n){return String(n).padStart(2,'0')};
