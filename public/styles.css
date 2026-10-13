@@ -7,7 +7,7 @@ img{max-width:100%}
 :root{
   --bg:#EEF1F4; --surface:#FFFFFF; --surface2:#F5F7F9; --ink:#12202C; --muted:#586876; --line:#D3DBE2;
   --accent:#0B5C73; --accent-ink:#FFFFFF; --accent-soft:#DCEEF3;
-  --free:#1B7547; --free-bg:#E0F2E8; --event:#8F5200; --event-bg:#FBEACB;
+  --free:#1B7547; --free-bg:#E0F2E8; --free-soft:#EDF8F1; --free-line:#A9D8BC; --event:#8F5200; --event-bg:#FBEACB;
   --danger:#B3261E; --danger-bg:#FBE3E1;
   --dept-s:55%; --dept-l:90%; --dept-bd:72%;
   --f-display:'Bricolage Grotesque','Segoe UI',system-ui,sans-serif;
@@ -17,13 +17,13 @@ img{max-width:100%}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#0E161D; --surface:#16212A; --surface2:#1B2832; --ink:#E6EDF2; --muted:#93A4B2; --line:#2B3A46;
   --accent:#5CC0DB; --accent-ink:#06222B; --accent-soft:#153542;
-  --free:#6FD19A; --free-bg:#153424; --event:#F0B454; --event-bg:#3A2D12;
+  --free:#6FD19A; --free-bg:#153424; --free-soft:#12291D; --free-line:#2D6446; --event:#F0B454; --event-bg:#3A2D12;
   --danger:#FF9A92; --danger-bg:#3C1B19;
   --dept-s:38%; --dept-l:22%; --dept-bd:34%; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#0E161D; --surface:#16212A; --surface2:#1B2832; --ink:#E6EDF2; --muted:#93A4B2; --line:#2B3A46;
   --accent:#5CC0DB; --accent-ink:#06222B; --accent-soft:#153542;
-  --free:#6FD19A; --free-bg:#153424; --event:#F0B454; --event-bg:#3A2D12;
+  --free:#6FD19A; --free-bg:#153424; --free-soft:#12291D; --free-line:#2D6446; --event:#F0B454; --event-bg:#3A2D12;
   --danger:#FF9A92; --danger-bg:#3C1B19;
   --dept-s:38%; --dept-l:22%; --dept-bd:34%; color-scheme:dark}
 
@@ -202,3 +202,9 @@ fieldset.days legend{font-size:13px;color:var(--muted);padding:0 4px}
 .mfbar{padding:12px 14px;margin:12px 0}
 .mfbar .fld span{font-size:12px}
 .mfbar input[type=search]{min-width:200px}
+
+/* Free venues: soft green so they stand out at a glance */
+.cell.free.vfree{background:var(--free-soft);border:1px solid var(--free-line);color:var(--free);font-weight:500}
+.cell.free.vfree.pick:hover{background:var(--free-bg);border-color:var(--free)}
+.cell.free.vfree.rel{background:var(--free-bg);border:1px solid var(--free)}
+.card.vfree{background:var(--free-soft);border-color:var(--free-line);border-left:4px solid var(--free)}

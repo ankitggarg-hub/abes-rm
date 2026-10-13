@@ -168,7 +168,7 @@ var sel=function(n,opts,v){return '<select id="f-'+n+'" name="'+n+'">'+opts.map(
 var slotOpts=function(){return slotList().filter(function(s){return !s.isBreak}).map(function(s){return [s.id,s.label+'  '+s.start+'–'+s.end]})};
 var deptOpts=function(central){return (central?[['',central]]:[]).concat(S.depts.map(function(d){return [d.id,d.code+' – '+d.name]}))};
 var emptyBox=function(m){return '<div class="empty">'+m+'</div>'};
-var legend='<div class="legend"><span><i style="border-style:dashed"></i>Free</span><span><i style="background:hsl(205 var(--dept-s) var(--dept-l))"></i>Class (department colour)</span><span><i style="background:var(--event-bg);border-color:var(--event)"></i>Event</span><span><i style="background:var(--free-bg);border-color:var(--free)"></i>Free, class away</span></div>';
+var legend='<div class="legend"><span><i style="background:var(--free-soft);border-color:var(--free-line)"></i>Free</span><span><i style="background:hsl(205 var(--dept-s) var(--dept-l))"></i>Class (department colour)</span><span><i style="background:var(--event-bg);border-color:var(--event)"></i>Event</span><span><i style="background:var(--free-bg);border-color:var(--free)"></i>Free, class away</span></div>';
 
 /* ---------- views ---------- */
 function vOverview(){
@@ -271,7 +271,7 @@ function vAvail(){
     '<label>Seats needed<input type="number" id="av-cap" min="0" step="10" placeholder="Any" value="'+esc(ui.avCap)+'" data-set="avCap" style="width:110px"></label>'+
     '</div></div>';
   var cards=free.length?'<div class="cards">'+free.map(function(r){
-    return '<div class="card"><h4>'+tcode(r.type)+esc(r.name)+'</h4><div class="meta">'+esc(r.type)+' · '+esc(locStr(r))+'</div><div><b class="mono">'+r.capacity+'</b> seats · '+dtag(r.deptId)+'</div><div class="meta">'+esc(r.equipment||'No equipment listed')+'</div>'+
+    return '<div class="card vfree"><h4>'+tcode(r.type)+esc(r.name)+'</h4><div class="meta">'+esc(r.type)+' · '+esc(locStr(r))+'</div><div><b class="mono">'+r.capacity+'</b> seats · '+dtag(r.deptId)+'</div><div class="meta">'+esc(r.equipment||'No equipment listed')+'</div>'+
       awayNote(r.id,date,win)+(canBook()?'<div><button class="btn primary sm" data-act="book" data-res="'+r.id+'" data-from="'+win[0]+'" data-to="'+win[win.length-1]+'">Book for this window</button></div>':'')+'</div>';
   }).join('')+'</div>':emptyBox('Nothing matches for the whole window. Try fewer periods, a smaller seat count or another date.');
   var head='<tr><th class="rh">Venue</th>'+sl.map(function(s){return '<th class="'+(win.indexOf(s.id)>-1?'hl':'')+'">'+esc(s.label)+'<small>'+s.start+'–'+s.end+'</small></th>'}).join('')+'</tr>';
@@ -279,7 +279,7 @@ function vAvail(){
     return '<tr><th class="rh">'+tcode(r.type)+esc(r.name)+'<small>'+r.capacity+' seats · '+(deptById(r.deptId)?deptById(r.deptId).code:'Central')+'</small></th>'+sl.map(function(s){
       if(s.isBreak)return '<td><div class="cell brk">Break</div></td>';
       var b=busyAt(r.id,date,s.id);
-      if(!b){var aw=awayAt(r.id,date,s.id);return '<td><'+(canBook()?'button data-act="book" data-res="'+r.id+'" data-from="'+s.id+'" data-to="'+s.id+'" class="cell free pick'+(aw?' rel':'')+'" title="Book '+esc(r.name)+' at '+s.start+(aw?' (class away: '+esc(classLabel(aw.t.classId)+', '+aw.rel.reason)+')':'')+'"':'div class="cell free'+(aw?' rel':'')+'"'+(aw?' title="'+esc('Class away: '+classLabel(aw.t.classId)+', '+aw.rel.reason)+'"':''))+'><i>Free</i>'+(aw?'<em>'+esc(classLabel(aw.t.classId))+' away</em>':'')+'</'+(canBook()?'button':'div')+'></td>'}
+      if(!b){var aw=awayAt(r.id,date,s.id);return '<td><'+(canBook()?'button data-act="book" data-res="'+r.id+'" data-from="'+s.id+'" data-to="'+s.id+'" class="cell free vfree pick'+(aw?' rel':'')+'" title="Book '+esc(r.name)+' at '+s.start+(aw?' (class away: '+esc(classLabel(aw.t.classId)+', '+aw.rel.reason)+')':'')+'"':'div class="cell free vfree'+(aw?' rel':'')+'"'+(aw?' title="'+esc('Class away: '+classLabel(aw.t.classId)+', '+aw.rel.reason)+'"':''))+'><i>Free</i>'+(aw?'<em>'+esc(classLabel(aw.t.classId))+' away</em>':'')+'</'+(canBook()?'button':'div')+'></td>'}
       if(b.kind==='class'){var d=deptById(r.deptId);return '<td><div class="cell cls" style="--h:'+(d?d.h:200)+'" title="'+esc(b.e.title+(b.e.faculty?' · '+b.e.faculty:''))+'"><b>'+esc(b.e.title)+'</b><span>'+esc(classLabel(b.e.classId))+'</span></div></td>'}
       return '<td><div class="cell ev"><b>'+esc(b.ev.title)+'</b><span>'+(b.ev.status==='pending'?'Requested':'Event')+'</span></div></td>';
     }).join('')+'</tr>';
