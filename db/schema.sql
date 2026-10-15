@@ -101,6 +101,17 @@ CREATE TABLE IF NOT EXISTS events (
 );
 CREATE INDEX IF NOT EXISTS events_res_date ON events (res_id, date);
 
+-- Server-side sign-in sessions: lets us sign out for real, time out idle users and revoke on password/role change
+CREATE TABLE IF NOT EXISTS sessions (
+  id         text PRIMARY KEY,
+  user_id    text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  last_seen  timestamptz NOT NULL DEFAULT now(),
+  expires_at timestamptz NOT NULL,
+  user_agent text NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS sessions_user ON sessions (user_id);
+
 -- Sign-in throttling
 CREATE TABLE IF NOT EXISTS login_attempts (
   email        text PRIMARY KEY,
