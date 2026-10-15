@@ -26,8 +26,8 @@ var snap={},lastRaw='',chain=Promise.resolve();
 var sync={state:'idle',at:null,msg:''};
 
 function ApiError(status,message){this.status=status;this.message=message}
-function api(method,path,body){
-  var opt={method:method,credentials:'same-origin',headers:{}};
+function api(method,path,body,bg){
+  var opt={method:method,credentials:'same-origin',headers:bg?{'x-background':'1'}:{}};
   if(body!==undefined){opt.headers['content-type']='application/json';opt.body=JSON.stringify(body)}
   return fetch(path,opt).then(function(res){
     return res.json().catch(function(){return {}}).then(function(j){
@@ -73,9 +73,9 @@ function save(){
     return loadAll(true).catch(function(){setSync('error',err.message)});
   });
 }
-function loadAll(silent){
+function loadAll(silent,bg){
   if(!silent)setSync('loading');
-  return api('GET','/api/data').then(function(res){
+  return api('GET','/api/data',undefined,bg).then(function(res){
     var raw=JSON.stringify(res.data);
     if(silent&&raw===lastRaw&&pendingOps().length===0){setSync('ok');return}
     applyData(res);ui.booting=false;setSync('ok');render();
@@ -520,7 +520,7 @@ function render(){
   if(!tabs.some(function(t){return t[0]===ui.tab}))ui.tab=tabs[0][0];
   head.classList.remove('gated');
   head.innerHTML='<div class="bar">'+brand+
-    '<div class="who"><span id="sync" class="syncwrap"></span><span class="me" title="'+esc(u.email)+'"><b>'+esc(u.name)+'</b> · '+ROLE[u.role]+'</span><button class="btn sm" data-act="logout">Sign out</button></div></div>'+
+    '<div class="who"><span id="sync" class="syncwrap"></span><span class="me" title="'+esc(u.email)+'"><b>'+esc(u.name)+'</b> · '+ROLE[u.role]+'</span><button class="btn sm" data-act="logout">Sign out</button><button class="btn sm" data-act="logoutall" title="Sign out on every device where you are signed in">Sign out everywhere</button></div></div>'+
     '<nav class="tabs" role="tablist" aria-label="Sections">'+tabs.map(function(t){return '<button class="tab" role="tab" aria-selected="'+(t[0]===ui.tab)+'" data-act="tab" data-v="'+t[0]+'">'+t[1]+'</button>'}).join('')+'</nav>';
   document.getElementById('main').innerHTML={overview:vOverview,avail:vAvail,events:vEvents,timetable:vTimetable,classes:vClasses,changes:vChanges,masters:vMasters}[ui.tab]();
   document.getElementById('modalRoot').innerHTML=modalHTML();
@@ -712,6 +712,7 @@ document.addEventListener('click',function(e){
   if(a==='closeModal'){if(el.classList.contains('overlay')&&e.target!==el)return;ui.modal=null;render();return}
   if(a!=='del')ui.confirm=null;
   switch(a){
+    case 'logoutall':api('POST','/api/auth/logout-all').catch(function(){}).then(function(){signedOut()});return;
     case 'logout':api('POST','/api/auth/logout').catch(function(){}).then(function(){signedOut()});return;
     case 'syncnow':save();break;
     case 'tab':ui.tab=d.v;break;
@@ -795,6 +796,6 @@ render();
 boot();
 setInterval(function(){
   if(!ui.userId||ui.modal||document.hidden||(document.activeElement&&document.activeElement.matches&&document.activeElement.matches('[data-mf]'))||sync.state==='saving'||sync.state==='loading'||sync.state==='error'||pendingOps().length)return;
-  loadAll(true).catch(function(err){if(err.status===401)signedOut('Your session has ended. Please sign in again.')});
+  loadAll(true,true).catch(function(err){if(err.status===401)signedOut('You were signed out after a period of inactivity, or your account changed. Please sign in again.')});
 },45000);
 })();
