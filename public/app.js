@@ -401,42 +401,63 @@ function vTrack(){
   if(!ui.trDept||!depts.some(function(d){return d.id===ui.trDept}))ui.trDept=depts[0].id;
   var cls=classesOf(ui.trDept);
   if(!cls.length)return head+trControls(depts,cls)+emptyBox('This department has no years or sections yet. The administrator adds them in Masters → Years & sections.');
-  if(!ui.trClass||!cls.some(function(c){return c.id===ui.trClass}))ui.trClass=cls[0].id;
-  var week=ui.trWeek,cid=ui.trClass,edit=canEditTrack(cid),lw=lastWorking(cid,week),open=!lw||today>=lw;
+  if(!ui.trClass||(trIsGroup(ui.trClass)?!trIds(ui.trClass).length:!cls.some(function(c){return c.id===ui.trClass})))ui.trClass=cls[0].id;
+  var ws=weeksOfMonth(ui.trMonth);
+  if(ws.indexOf(ui.trWeek)<0)ui.trWeek=ws.indexOf(mondayOf(today))>-1?mondayOf(today):ws[0];
+  var week=ui.trWeek,ids=trIds(ui.trClass),grp=trIsGroup(ui.trClass),cid=ids[0],glabel=grp?trGroupLabel(ui.trClass):classLabel(cid),edit=ids.every(canEditTrack);
   var wkend=[5,6].filter(function(i){return !dayInfo(cid,addD(week,i)).off});
-  var strip='<div class="dstrip">'+DAYS3.concat(wkend.map(function(i){return i===5?'Sat':'Sun'})).map(function(n,i){var di=i<5?i:wkend[i-5],d=addD(week,di),h=dayInfo(cid,d);return '<div class="dcell'+(h.off?' off':' work')+'" title="'+esc(h.title)+'"><b>'+n+'</b> '+fmtShort(d)+'<span>'+esc(h.off?h.title:(h.entry?h.title:'Working day'))+'</span></div>'}).join('')+'</div>';
+  var cellsN=5+wkend.length;
+  var strip='<div class="dstrip" style="grid-template-columns:repeat('+cellsN+',minmax(0,1fr))">'+DAYS3.concat(wkend.map(function(i){return i===5?'Sat':'Sun'})).map(function(n,i){var di=i<5?i:wkend[i-5],d=addD(week,di),h=dayInfo(cid,d);return '<div class="dcell'+(h.off?' off':' work')+'" title="'+esc(h.title)+'"><b>'+n+'</b> '+fmtShort(d)+'<span>'+esc(h.off?h.title:(h.entry?h.title:'Working day'))+'</span></div>'}).join('')+'</div>';
   var working=[0,1,2,3,4,5,6].filter(function(i){return !dayInfo(cid,addD(week,i)).off}).length;
-  var rows='',tp=0,ta=0,tn=0,td=0;
+  // month plan: one box, one column pair per week
+  var n=ids.length,mp={};
+  function wkOpen(w){var lw=lastWorking(cid,w);return !lw||today>=lw}
+  var head1='<th rowspan="2">Load type</th>'+ws.map(function(w){return '<th colspan="2" class="wkh'+(w===week?' cur':'')+'"><button class="link" data-act="trwk" data-w="'+w+'">'+fmtShort(w)+' – '+fmtShort(addD(w,4))+'</button></th>'}).join('')+'<th colspan="3" class="wkh mon">Month</th>';
+  var head2=ws.map(function(w){return '<th class="sub'+(w===week?' cur':'')+'">Plan</th><th class="sub'+(w===week?' cur':'')+'">Actual</th>'}).join('')+'<th class="sub mon">Plan</th><th class="sub mon">Actual</th><th class="sub mon">vs plan</th>';
+  var rows='',GP={},GA={},GD={},GN=0;
+  ws.forEach(function(w){GP[w]=0;GA[w]=0;GD[w]=0});var gMP=0,gMA=0,gMD=0,gMN=0;
   LOAD_KINDS.forEach(function(kind){
     var L=loads.filter(function(l){return l.kind===kind});if(!L.length)return;
-    var kp=0,ka=0,kn=0,kd=0;
-    rows+='<tr class="kind"><th colspan="4">'+kind+' load</th></tr>';
+    var KP={},KA={},KD={},KN={};ws.forEach(function(w){KP[w]=0;KA[w]=0;KD[w]=0;KN[w]=0});var kMP=0,kMA=0,kMD=0,kMN=0;
+    rows+='<tr class="kind"><th colspan="'+(1+ws.length*2+3)+'">'+kind+' load</th></tr>';
     L.forEach(function(l){
-      var r=planRow(cid,week,l.id),p=r?r.planned:0,a=r&&r.actual!==undefined?r.actual:null;
-      kp+=p;if(a!==null){ka+=a;kn++;kd+=a-p}
-      var pc=edit?'<input class="hrs" type="number" min="0" max="100" step="0.5" inputmode="decimal" value="'+(r?p:'')+'" placeholder="0" data-tr="'+cid+'|'+l.id+'|planned" aria-label="Planned hours, '+esc(l.name)+'">':'<span class="mono">'+(r?p:'–')+'</span>';
-      var ac=edit?'<input class="hrs" type="number" min="0" max="100" step="0.5" inputmode="decimal" value="'+(a===null?'':a)+'" placeholder="'+(open?'hrs':'–')+'"'+(open?'':' disabled title="Opens on the last working day of the week ('+(lw?fmtShort(lw):'')+')"')+' data-tr="'+cid+'|'+l.id+'|actual" aria-label="Actual hours, '+esc(l.name)+'">':'<span class="mono">'+(a===null?'–':a)+'</span>';
-      rows+='<tr><td>'+esc(l.name)+'</td><td>'+pc+'</td><td>'+ac+'</td>'+varCell(p,a)+'</tr>';
+      var tds='',mP=0,mA=0,mD=0,mN=0;
+      ws.forEach(function(w){
+        var cv=cellVals(ids,w,l.id),open=wkOpen(w),cur=w===week?' cur':'';
+        var psum=0,asum=0,dsum=0,anum=0;
+        ids.forEach(function(id){var r=planRow(id,w,l.id),pp=r?r.planned:0,aa=r&&r.actual!==undefined&&r.actual!==null?r.actual:null;psum+=pp;if(aa!==null){asum+=aa;dsum+=aa-pp;anum++}});
+        var pAvg=psum/n;mP+=pAvg;if(anum){mA+=asum/n;mD+=dsum/n;mN++}
+        KP[w]+=pAvg;if(anum){KA[w]+=asum/n;KD[w]+=dsum/n;KN[w]++}
+        var pc=edit?'<input class="hrs" type="number" min="0" max="100" step="0.5" inputmode="decimal" value="'+(cv.pMixed?'':(cv.p?cv.p:''))+'" placeholder="'+(cv.pMixed?'mixed':'0')+'" data-tr="'+(grp?ui.trClass:cid)+'|'+l.id+'|planned|'+w+'" aria-label="Planned hours, '+esc(l.name)+', week of '+fmtShort(w)+'">':'<span class="mono">'+(cv.pMixed?'mixed':(cv.p||'–'))+'</span>';
+        var single=!grp&&cv.a!==null,tone=anum&&!cv.pMixed&&!cv.aMixed&&cv.a!==null?(rnd1(cv.a-cv.p)===0?' ok':' bad'):'';
+        var ac=(edit&&!grp)?'<input class="hrs" type="number" min="0" max="100" step="0.5" inputmode="decimal" value="'+(cv.a===null?'':cv.a)+'" placeholder="'+(open?'hrs':'–')+'"'+(open?'':' disabled title="Opens on the last working day of this week"')+' data-tr="'+cid+'|'+l.id+'|actual|'+w+'" aria-label="Actual hours, '+esc(l.name)+', week of '+fmtShort(w)+'">':'<span class="mono">'+(cv.aMixed?'mixed':(cv.a===null?'–':cv.a))+'</span>';
+        tds+='<td class="wp'+cur+'">'+pc+'</td><td class="wa'+tone+cur+'">'+ac+(tone?'<small class="vb">'+(tone===' ok'?'✓':sgn(cv.a-cv.p))+'</small>':'')+'</td>';
+      });
+      kMP+=mP;kMA+=mA;kMD+=mD;kMN+=mN;
+      rows+='<tr><td>'+esc(l.name)+'</td>'+tds+'<td class="mono mon">'+rnd1(mP)+'</td><td class="mono mon">'+(mN?rnd1(mA):'–')+'</td>'+varCell(0,mN?rnd1(mD):null,' mon')+'</tr>';
     });
-    rows+='<tr class="sub"><td>'+kind+' total</td><td class="mono">'+rnd1(kp)+'</td><td class="mono">'+(kn?rnd1(ka):'–')+'</td>'+varCell(0,kn?rnd1(kd):null)+'</tr>';
-    tp+=kp;ta+=ka;tn+=kn;td+=kd;
+    var kt='';ws.forEach(function(w){var has=KN[w]>0,tone=has?(rnd1(KD[w])===0?' ok':' bad'):'';kt+='<td class="mono wp">'+rnd1(KP[w])+'</td><td class="mono wa'+tone+'">'+(has?rnd1(KA[w]):'–')+(has?'<small class="vb">'+(tone===' ok'?'✓':sgn(KD[w]))+'</small>':'')+'</td>';GP[w]+=KP[w];GA[w]+=KA[w];GD[w]+=KD[w];if(has)GN++});
+    rows+='<tr class="sub"><td>'+kind+' total</td>'+kt+'<td class="mono mon">'+rnd1(kMP)+'</td><td class="mono mon">'+(kMN?rnd1(kMA):'–')+'</td>'+varCell(0,kMN?rnd1(kMD):null,' mon')+'</tr>';
+    gMP+=kMP;gMA+=kMA;gMD+=kMD;gMN+=kMN;
   });
-  rows+='<tr class="grand"><td>All load types</td><td class="mono">'+rnd1(tp)+'</td><td class="mono">'+(tn?rnd1(ta):'–')+'</td>'+varCell(0,tn?rnd1(td):null)+'</tr>';
-  var note=edit?(open?'Enter what was actually completed for each load type.':'Planned hours can be entered now. Actual hours open on the last working day of the week, '+(lw?fmtLong(lw):'')+'.'):'You can view this plan. Only the department head or an administrator can change it.';
-  var table='<div class="scroll"><table class="tbl trtbl"><thead><tr><th>Load type</th><th>Planned (hrs)</th><th>Actual (hrs)</th><th>Against plan</th></tr></thead><tbody>'+rows+'</tbody></table></div><p class="note" style="margin:6px 0 0">'+note+' Green means the target was met exactly. Red shows how many hours over (+) or under (−) the plan.</p>';
+  var gt='';ws.forEach(function(w){var has=false;S.wplans.forEach(function(r){if(ids.indexOf(r.classId)>-1&&r.weekStart===w&&r.actual!==undefined&&r.actual!==null)has=true});var tone=has?(rnd1(GD[w])===0?' ok':' bad'):'';gt+='<td class="mono wp">'+rnd1(GP[w])+'</td><td class="mono wa'+tone+'">'+(has?rnd1(GA[w]):'–')+(has?'<small class="vb">'+(tone===' ok'?'✓':sgn(GD[w]))+'</small>':'')+'</td>'});
+  rows+='<tr class="grand"><td>All load types</td>'+gt+'<td class="mono mon">'+rnd1(gMP)+'</td><td class="mono mon">'+(gMN?rnd1(gMA):'–')+'</td>'+varCell(0,gMN?rnd1(gMD):null,' mon')+'</tr>';
+  var lw=lastWorking(cid,week),open=wkOpen(week);
+  var note=grp?'Figures are the average per section. Hours you type under Plan are applied to every section in this group. Pick a single section to enter actual hours.':(edit?(open?'Enter what was actually completed in the week that has ended or is ending.':'Planned hours can be entered any time. Actual hours open on the last working day of each week.'):'You can view this plan. Only the department head or an administrator can change it.');
+  var table='<div class="scroll"><table class="tbl trtbl trmonth"><thead><tr>'+head1+'</tr><tr>'+head2+'</tr></thead><tbody>'+rows+'</tbody></table></div><p class="note" style="margin:6px 0 0">'+note+' Green means the target was met exactly. Red shows how many hours over (+) or under (−) the plan.</p>';
   var sum=cls.map(function(c){
     var t=weekTotals(c.id,week),cu=cumulative(c.id);
-    return '<tr'+(c.id===cid?' class="cur"':'')+'><td><button class="link" data-act="trclass" data-id="'+c.id+'"><b>Year '+c.year+' · '+esc(c.section)+'</b></button></td><td class="mono">'+t.planned+'</td><td class="mono">'+(t.entered?t.actual:'–')+'</td>'+varCell(0,t.entered?t.diff:null)+varCell(0,cu.entered?cu.diff:null)+'</tr>';
+    return '<tr'+(ids.indexOf(c.id)>-1?' class="cur"':'')+'><td><button class="link" data-act="trclass" data-id="'+c.id+'"><b>Year '+c.year+' · '+esc(c.section)+'</b></button></td><td class="mono">'+t.planned+'</td><td class="mono">'+(t.entered?t.actual:'–')+'</td>'+varCell(0,t.entered?t.diff:null)+varCell(0,cu.entered?cu.diff:null)+'</tr>';
   }).join('');
   var summary='<section><h3 style="margin-bottom:10px">All sections of '+esc(deptById(ui.trDept).code)+', week of '+fmtShort(week)+'</h3><div class="scroll"><table class="tbl trtbl"><thead><tr><th>Section</th><th>Planned (hrs)</th><th>Actual (hrs)</th><th>This week vs plan</th><th>Overall to date vs plan</th></tr></thead><tbody>'+sum+'</tbody></table></div></section>';
   var offs=S.holidays.filter(function(h){return (!h.classId||(classById(h.classId)&&classById(h.classId).deptId===ui.trDept))&&h.dateTo>=addD(today,-60)}).sort(function(a,b){return b.dateFrom.localeCompare(a.dateFrom)}).slice(0,15);
-  var offTbl='<section><div class="rowhead"><h3>Off days and working days</h3>'+((isHod||u.role==='admin')?'<button class="btn sm" data-act="add" data-t="offday">Mark off or working day</button>':'')+'</div>'+trCalendar(cid,edit||u.role==='admin')+(offs.length?'<div class="scroll"><table class="tbl"><thead><tr><th>Dates</th><th>Type</th><th>Title</th><th>Applies to</th><th></th></tr></thead><tbody>'+offs.map(function(h){var k='off:'+h.id,own=h.classId?canEditTrack(h.classId):u.role==='admin';return '<tr><td class="mono" style="white-space:nowrap">'+(h.dateFrom===h.dateTo?fmtLong(h.dateFrom):fmtShort(h.dateFrom)+' – '+fmtLong(h.dateTo))+'</td><td>'+kindTag(h)+'</td><td>'+esc(h.title)+'</td><td>'+(h.classId?esc(classLabel(h.classId)):'<span class="dtag central">All departments</span>')+'</td><td class="act">'+(own?'<button class="btn sm danger" data-act="del" data-k="'+k+'">'+(ui.confirm===k?'Confirm delete':'Delete')+'</button>':'')+'</td></tr>'}).join('')+'</tbody></table></div>':emptyBox('No off days in the last two months or ahead.'))+'<p class="note" style="margin:6px 0 0">Saturdays and Sundays are off without any entry. To work on one, choose “Working day” when marking, or click the date in the calendar. The administrator sets days for everyone. Department heads set them for their own years and sections.</p></section>';
-  var wk='<div class="panel"><div class="filters">'+trControlsHTML(depts,cls)+'<div class="seg"><button class="btn sm" data-act="trweek" data-n="-1">Previous week</button><button class="btn sm" data-act="trweek" data-n="0">This week</button><button class="btn sm" data-act="trweek" data-n="1">Next week</button></div><label>Jump to week<input type="date" id="tr-pick" value="'+week+'" data-set="trPick"></label></div></div>';
-  var copy=edit?'<section><div class="panel"><div class="filters"><label>Apply this week’s planned hours to<select id="tr-copy">'+scopeHTML('D:'+ui.trDept,true)+'</select></label><button class="btn sm" data-act="trcopy">Copy plan</button></div><p class="note" style="margin:6px 0 0">Copies the planned hours of '+esc(classLabel(cid))+' for this week to the sections you choose. Actual hours are never copied.</p></div></section>':'';
-  return head+wk+'<section><h3 style="margin-bottom:10px">'+esc(classLabel(cid))+' · '+fmtLong(week)+' to '+fmtLong(addD(week,4))+' <span class="note">· '+working+' working day'+(working===1?'':'s')+'</span></h3>'+strip+'</section><section>'+table+'</section>'+copy+summary+offTbl;
+  var offTbl='<section><div class="rowhead"><h3>Off days and working days</h3>'+((isHod||u.role==='admin')?'<button class="btn sm" data-act="add" data-t="offday">Mark off or working day</button>':'')+'</div>'+trCalendar(cid,edit||u.role==='admin',glabel)+(offs.length?'<div class="scroll"><table class="tbl"><thead><tr><th>Dates</th><th>Type</th><th>Title</th><th>Applies to</th><th></th></tr></thead><tbody>'+offs.map(function(h){var k='off:'+h.id,own=h.classId?canEditTrack(h.classId):u.role==='admin';return '<tr><td class="mono" style="white-space:nowrap">'+(h.dateFrom===h.dateTo?fmtLong(h.dateFrom):fmtShort(h.dateFrom)+' – '+fmtLong(h.dateTo))+'</td><td>'+kindTag(h)+'</td><td>'+esc(h.title)+'</td><td>'+(h.classId?esc(classLabel(h.classId)):'<span class="dtag central">All departments</span>')+'</td><td class="act">'+(own?'<button class="btn sm danger" data-act="del" data-k="'+k+'">'+(ui.confirm===k?'Confirm delete':'Delete')+'</button>':'')+'</td></tr>'}).join('')+'</tbody></table></div>':emptyBox('No off days in the last two months or ahead.'))+'<p class="note" style="margin:6px 0 0">Saturdays and Sundays are off without any entry. To work on one, choose “Working day” when marking, or click the date in the calendar. The administrator sets days for everyone. Department heads set them for their own years and sections.</p></section>';
+  var monthLabel=new Date(ui.trMonth+'-01T00:00:00Z').toLocaleDateString('en-IN',{month:'long',year:'numeric',timeZone:'UTC'});
+  var wk='<div class="panel"><div class="filters">'+trControlsHTML(depts,cls,ws)+'<button class="btn sm" data-act="trthis">This week</button></div>'+(edit&&!grp?'<div class="filters copyrow"><label>Copy this week’s planned hours to'+scopeHTML('D:'+ui.trDept,true,'tr-copy')+'</label><button class="btn sm" data-act="trcopy">Copy plan</button><span class="note">Copies the plan of '+esc(glabel)+' for '+fmtShort(week)+' – '+fmtShort(addD(week,4))+'. Actual hours are never copied.</span></div>':'')+'</div>';
+  return head+wk+'<section><h3 style="margin-bottom:10px">'+esc(glabel)+' · '+fmtShort(week)+' – '+fmtLong(addD(week,4))+' <span class="note">· '+working+' working day'+(working===1?'':'s')+'</span></h3>'+strip+'</section><section><h3 style="margin-bottom:10px">Plan for '+monthLabel+'</h3>'+table+'</section>'+summary+offTbl;
 }
 function kindTag(h){return h.kind==='working'?'<span class="dtag work">Working day</span>':'<span class="dtag">Off day</span>'}
-function trCalendar(cid,canMark){
+function trCalendar(cid,canMark,lab){
   var m=ui.trMonth,first=m+'-01',start=mondayOf(first),y=+m.slice(0,4),mo=+m.slice(5,7),last=new Date(Date.UTC(y,mo,0)).toISOString().slice(0,10);
   var title=new Date(first+'T00:00:00Z').toLocaleDateString('en-IN',{month:'long',year:'numeric',timeZone:'UTC'});
   var cells='',d=start;
@@ -446,11 +467,31 @@ function trCalendar(cid,canMark){
     d=addD(d,1);if(d>last&&new Date(d+'T00:00:00Z').getUTCDay()===1)break;
   }
   var hd=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(function(n){return '<div class="calh">'+n+'</div>'}).join('');
-  return '<div class="calbox"><div class="rowhead"><b>'+title+' · '+esc(classLabel(cid))+'</b><span class="seg"><button class="btn sm" data-act="trmonth" data-n="-1">Previous</button><button class="btn sm" data-act="trmonth" data-n="0">This month</button><button class="btn sm" data-act="trmonth" data-n="1">Next</button></span></div><div class="calgrid">'+hd+cells+'</div><p class="note" style="margin:6px 0 0"><span class="lg work"></span>Working <span class="lg off"></span>Off day <span class="lg weekend"></span>Weekend <span class="lg wk"></span>Converted to working'+(canMark?'. Click a date to mark it off, or to make an off day a working day.':'.')+'</p></div>';
+  return '<div class="calbox"><div class="rowhead"><b>'+title+' · '+esc(lab||classLabel(cid))+'</b><span class="seg"><button class="btn sm" data-act="trmonth" data-n="-1">Previous</button><button class="btn sm" data-act="trmonth" data-n="0">This month</button><button class="btn sm" data-act="trmonth" data-n="1">Next</button></span></div><div class="calgrid">'+hd+cells+'</div><p class="note" style="margin:6px 0 0"><span class="lg work"></span>Working <span class="lg off"></span>Off day <span class="lg weekend"></span>Weekend <span class="lg wk"></span>Converted to working'+(canMark?'. Click a date to mark it off, or to make an off day a working day.':'.')+'</p></div>';
 }
-function trControlsHTML(depts,cls){
+function trIsGroup(sel){return sel==='ALL'||(typeof sel==='string'&&sel.indexOf('Y:')===0)}
+function trIds(sel){var cl=classesOf(ui.trDept);if(sel==='ALL')return cl.map(function(c){return c.id});if(trIsGroup(sel)){var y=+sel.slice(2);return cl.filter(function(c){return c.year===y}).map(function(c){return c.id})}return [sel]}
+function trScope(sel){return sel==='ALL'?'D:'+ui.trDept:trIsGroup(sel)?'Y:'+ui.trDept+':'+sel.slice(2):sel}
+function trGroupLabel(sel){var d=deptById(ui.trDept);return sel==='ALL'?'All years and sections of '+(d?d.code:''):'Year '+sel.slice(2)+' · all sections'}
+function weeksOfMonth(m){var first=m+'-01',last=new Date(Date.UTC(+m.slice(0,4),+m.slice(5,7),0)).toISOString().slice(0,10),r=[];for(var w=mondayOf(first);w<=last;w=addD(w,7)){if(addD(w,4)>=first)r.push(w)}return r}
+function cellVals(ids,week,loadId){
+  var ps=[],as=[];
+  ids.forEach(function(id){var r=planRow(id,week,loadId);ps.push(r?r.planned:0);as.push(r&&r.actual!==undefined&&r.actual!==null?r.actual:null)});
+  var pc=ps.every(function(x){return x===ps[0]}),ac=as.every(function(x){return x===as[0]});
+  return {p:pc?ps[0]:null,a:ac?as[0]:null,pMixed:!pc,aMixed:!ac};
+}
+function monthOptions(){
+  var r=[],b=new Date(today.slice(0,7)+'-01T00:00:00Z');
+  for(var k=-6;k<=12;k++){var d=new Date(Date.UTC(b.getUTCFullYear(),b.getUTCMonth()+k,1)),v=d.toISOString().slice(0,7);r.push(v)}
+  if(r.indexOf(ui.trMonth)<0){r.push(ui.trMonth);r.sort()}
+  return r;
+}
+function trControlsHTML(depts,cls,ws){
+  var years=yearsOf(cls),mo=monthOptions();
   return (depts.length>1?'<label>Department<select id="tr-dept" data-set="trDept">'+depts.map(function(d){return '<option value="'+d.id+'"'+(d.id===ui.trDept?' selected':'')+'>'+esc(d.code+' – '+d.name)+'</option>'}).join('')+'</select></label>':'')+
-    '<label>Year and section<select id="tr-class" data-set="trClass">'+cls.map(function(c){return '<option value="'+c.id+'"'+(c.id===ui.trClass?' selected':'')+'>Year '+c.year+' · Section '+esc(c.section)+'</option>'}).join('')+'</select></label>';
+    '<label>Year and section<select id="tr-class" data-set="trClass"><optgroup label="Whole groups"><option value="ALL"'+(ui.trClass==='ALL'?' selected':'')+'>All years and sections</option>'+years.map(function(y){return '<option value="Y:'+y+'"'+(ui.trClass==='Y:'+y?' selected':'')+'>Year '+y+' · all sections</option>'}).join('')+'</optgroup><optgroup label="One section">'+cls.map(function(c){return '<option value="'+c.id+'"'+(c.id===ui.trClass?' selected':'')+'>Year '+c.year+' · Section '+esc(c.section)+'</option>'}).join('')+'</optgroup></select></label>'+
+    (ws?'<label>Month<select id="tr-month" data-set="trMonth">'+mo.map(function(m){return '<option value="'+m+'"'+(m===ui.trMonth?' selected':'')+'>'+new Date(m+'-01T00:00:00Z').toLocaleDateString('en-IN',{month:'long',year:'numeric',timeZone:'UTC'})+'</option>'}).join('')+'</select></label>'+
+    '<label>Week<select id="tr-week" data-set="trWeek">'+ws.map(function(w,i){return '<option value="'+w+'"'+(w===ui.trWeek?' selected':'')+'>Week '+(i+1)+' · '+fmtShort(w)+' to '+fmtShort(addD(w,4))+'</option>'}).join('')+'</select></label>':'');
 }
 function trControls(depts,cls){return '<div class="panel"><div class="filters">'+trControlsHTML(depts,cls)+'</div></div>'}
 function mLoads(){
@@ -470,13 +511,13 @@ function scopeIds(sc){
   if(sc.indexOf('Y:')===0){var pp=sc.split(':');return classesOf(pp[1]).filter(function(c){return c.year===+pp[2]}).map(function(c){return c.id})}
   return [sc];
 }
-function scopeHTML(val,noCampus){
+function scopeHTML(val,noCampus,id){
   var u=me(),admin=u.role==='admin',o='';
   if(admin&&!noCampus)o+='<option value=""'+(val===''?' selected':'')+'>All departments (whole campus)</option>';
   var ds=S.depts.filter(function(d){return admin||myDepts().indexOf(d.id)>-1});
   ds.forEach(function(d){var cl=classesOf(d.id);if(!cl.length)return;
     o+='<optgroup label="'+esc(d.code+' – '+d.name)+'"><option value="D:'+d.id+'"'+(val==='D:'+d.id?' selected':'')+'>All years and sections of '+esc(d.code)+'</option>'+yearsOf(cl).map(function(yr){return '<option value="Y:'+d.id+':'+yr+'"'+(val==='Y:'+d.id+':'+yr?' selected':'')+'>Year '+yr+' · all sections</option>'}).join('')+cl.map(function(c){return '<option value="'+c.id+'"'+(val===c.id?' selected':'')+'>Year '+c.year+' · Section '+esc(c.section)+'</option>'}).join('')+'</optgroup>'});
-  return '<select id="f-scope" name="scope">'+o+'</select>';
+  return '<select id="'+(id||'f-scope')+'" name="scope">'+o+'</select>';
 }
 
 function vEvents(){
@@ -977,9 +1018,10 @@ document.addEventListener('click',function(e){
     case 'lunch':{var ldd=deptById(d.id);if(ldd)open('lunch',{id:ldd.id,lunch:(ldd.lunchSlots||[]).slice()});return}
     case 'addbreak':{var eb=S.slots.filter(function(x){return x.isBreak})[0];open('slot',eb?Object.assign({},eb):{label:'Lunch',start:'13:15',end:'14:00',isBreak:true});return}
     case 'fullday':{var fl=slotOpts();open('fullday',{resId:ui.ttMode==='week'?ui.ttRes:'',days:[ui.ttDay],from:fl.length?fl[0][0]:'',to:fl.length?fl[fl.length-1][0]:'',title:'',faculty:'',classId:ui.lastClass||''});return}
-    case 'trweek':ui.trWeek=(+d.n===0)?mondayOf(today):addD(ui.trWeek,7*(+d.n));break;
+    case 'trthis':ui.trMonth=today.slice(0,7);ui.trWeek=mondayOf(today);break;
+    case 'trwk':ui.trWeek=d.w;break;
     case 'trmonth':{var mm=d.n==='0'?today.slice(0,7):addD(ui.trMonth+'-15',30*(+d.n)).slice(0,7);ui.trMonth=mm;break}
-    case 'calday':{var cd=d.d,cu=me();var base={dateFrom:cd,dateTo:cd,kind:d.off==='1'?'working':'off',title:d.off==='1'?'Working day':'',scope:ui.trClass};if(cu.role==='admin')base.scope=ui.trClass;open('offday',base);return}
+    case 'calday':{var cd=d.d,cu=me();var base={dateFrom:cd,dateTo:cd,kind:d.off==='1'?'working':'off',title:d.off==='1'?'Working day':'',scope:trScope(ui.trClass)};open('offday',base);return}
     case 'trcopy':{var tg=scopeIds(document.getElementById('tr-copy').value).filter(function(x){return x&&x!==ui.trClass&&canEditTrack(x)});
       var src2=S.wplans.filter(function(r){return r.classId===ui.trClass&&r.weekStart===ui.trWeek});
       if(!tg.length){toast('Choose other sections of your department.');break}
@@ -1002,12 +1044,15 @@ document.addEventListener('change',function(e){
   var mfs=e.target.closest('select[data-mf]');if(mfs){ui.mf[mfs.dataset.mf]=mfs.value;render();return}
   var tr=e.target.closest('[data-tr]');
   if(tr){
-    var tp=tr.dataset.tr.split('|'),tcid=tp[0],tlid=tp[1],tf=tp[2],raw=tr.value.trim(),tv;
+    var tp=tr.dataset.tr.split('|'),tcid=tp[0],tlid=tp[1],tf=tp[2],twk=tp[3]||ui.trWeek,raw=tr.value.trim(),tv;
     if(raw==='')tv=tf==='planned'?0:null;
     else{tv=Number(raw);if(!isFinite(tv)||tv<0||tv>100){toast('Enter hours between 0 and 100.',true);render();return}tv=Math.round(tv*10)/10}
-    var trow=planRow(tcid,ui.trWeek,tlid);
-    if(!trow){if(tv===null||(tf==='planned'&&tv===0))return;trow={id:uid('w'),classId:tcid,weekStart:ui.trWeek,loadId:tlid,planned:0,actual:null};S.wplans.push(trow)}
-    trow[tf]=tv;save();render();return;
+    trIds(tcid).forEach(function(oneId){
+      var trow=planRow(oneId,twk,tlid);
+      if(!trow){if(tv===null||(tf==='planned'&&tv===0))return;trow={id:uid('w'),classId:oneId,weekStart:twk,loadId:tlid,planned:0,actual:null};S.wplans.push(trow)}
+      trow[tf]=tv;
+    });
+    save();render();return;
   }
   var lr=e.target.closest('[data-lendref]');
   if(lr&&ui.modal&&ui.modal.type==='lend'){var lfm=lr.closest('form'),lfd={};new FormData(lfm).forEach(function(val,key){lfd[key]=val});ui.modal.vals=Object.assign({},ui.modal.vals,lfd);ui.modal.err='';render();return}
