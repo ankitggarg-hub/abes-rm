@@ -208,3 +208,21 @@ fieldset.days legend{font-size:13px;color:var(--muted);padding:0 4px}
 .cell.free.vfree.pick:hover{background:var(--free-bg);border-color:var(--free)}
 .cell.free.vfree.rel{background:var(--free-bg);border:1px solid var(--free)}
 .card.vfree{background:var(--free-soft);border-color:var(--free-line);border-left:4px solid var(--free)}
+
+/* Academic tracker */
+.dstrip{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.dcell{border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:12px;display:grid;gap:2px;min-width:0}
+.dcell span{color:var(--muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dcell.work{background:var(--free-soft);border-color:var(--free-line)}
+.dcell.off{background:repeating-linear-gradient(135deg,var(--line) 0 6px,transparent 6px 12px)}
+@media (max-width:760px){.dstrip{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.trtbl td,.trtbl th{white-space:nowrap}
+.trtbl tr.kind th{background:var(--surface2);text-transform:none;letter-spacing:0;font-size:12px;color:var(--ink)}
+.trtbl tr.sub td{font-weight:600;background:var(--surface2)}
+.trtbl tr.grand td{font-weight:700;border-top:2px solid var(--line)}
+.trtbl tr.cur td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
+.trtbl td.vr-ok{background:var(--free-bg);color:var(--free);font-weight:600}
+.trtbl td.vr-bad{background:var(--danger-bg);color:var(--danger);font-weight:600}
+.trtbl td.vr-wait{color:var(--muted)}
+input.hrs{width:84px;text-align:right;font-family:var(--f-mono)}
+.rowhead{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px}

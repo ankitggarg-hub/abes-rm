@@ -17,7 +17,8 @@ var toMin=function(t){var p=t.split(':');return +p[0]*60+ +p[1]};
 var uid=function(p){return p+Math.random().toString(36).slice(2,8)};
 
 /* ---------- state ---------- */
-var KEYS=['depts','classes','slots','buildings','floors','resources','users','tt','releases','events'];
+var KEYS=['depts','classes','slots','buildings','floors','resources','users','tt','releases','events','loads','holidays','wplans'];
+var LOAD_KINDS=['Academic','Training'];
 function emptyState(){var o={};KEYS.forEach(function(k){o[k]=[]});return o}
 var S=emptyState();
 
@@ -101,7 +102,7 @@ function updateSync(){var el=document.getElementById('sync');if(el)el.innerHTML=
 
 var today=iso(new Date());
 var ui={booting:true,loginErr:'',loginBusy:false,userId:null,tab:'overview',mtab:'depts',ttDept:null,ttRes:null,ttMode:'week',ttDay:0,
-  avDate:today,lnDate:today,lnFrom:null,lnTo:null,lnType:'',avFrom:null,avTo:null,avType:'',avCap:'',avBld:'',avFl:'',mf:{},chDept:null,chClass:'',chFrom:today,chTo:today,chSlotA:'',chSlotB:'',chReason:'Industrial visit',chNote:'',modal:null,confirm:null,evShowPast:false};
+  trDept:null,trClass:'',trWeek:mondayOf(today),avDate:today,lnDate:today,lnFrom:null,lnTo:null,lnType:'',avFrom:null,avTo:null,avType:'',avCap:'',avBld:'',avFl:'',mf:{},chDept:null,chClass:'',chFrom:today,chTo:today,chSlotA:'',chSlotB:'',chReason:'Industrial visit',chNote:'',modal:null,confirm:null,evShowPast:false};
 
 /* ---------- selectors ---------- */
 var slotList=function(){return S.slots.slice().sort(function(a,b){return a.start.localeCompare(b.start)})};
@@ -154,9 +155,9 @@ function ensure(){
 function tabsFor(r){
   var pend=S.events.filter(function(e){return e.status==='pending'}).length;
   var ev=['events','Events'+(canApprove()&&pend?'<span class="count">'+pend+'</span>':'')];
-  if(r==='admin')return [['overview','Overview'],['avail','Availability'],ev,['timetable','Timetables'],['classes','Rooms by class'],['changes','Class changes'],['masters','Masters']];
-  if(r==='hod')return [['overview','Overview'],['timetable','My timetable'],['changes','Class changes'],['classes','Rooms by class'],['avail','Availability'],['lend','Lend a venue'],ev];
-  if(r==='head')return [['overview','Overview'],['avail','Find a venue'],['changes','Class changes'],['classes','Rooms by class'],ev];
+  if(r==='admin')return [['overview','Overview'],['avail','Availability'],ev,['timetable','Timetables'],['classes','Rooms by class'],['changes','Class changes'],['track','Academic tracker'],['masters','Masters']];
+  if(r==='hod')return [['overview','Overview'],['timetable','My timetable'],['changes','Class changes'],['classes','Rooms by class'],['avail','Availability'],['lend','Lend a venue'],['track','Academic tracker'],ev];
+  if(r==='head')return [['overview','Overview'],['avail','Find a venue'],['changes','Class changes'],['classes','Rooms by class'],['track','Academic tracker'],ev];
   return [['overview','Overview'],['classes','Rooms by class'],['avail','Find a venue'],ev];
 }
 
@@ -350,7 +351,103 @@ function lentToPanel(){
   return '<section class="panel"><h3>Venues lent to your department</h3>'+(up.length?'<ul class="list">'+up.map(function(e){var r=resById(e.resId),ld=deptById(e.lentDeptId);return '<li><span><b>'+esc(e.title)+'</b><br><span class="note">'+esc(r?r.name:'Removed venue')+' · '+fmtDate(e.date)+' · <span class="mono">'+timeRange(e.slotIds)+'</span>'+(ld?' · lent by '+esc(ld.code):'')+'</span></span></li>'}).join('')+'</ul>':'<p class="note" style="margin:0">No other department has lent you a venue yet.</p>')+'</section>';
 }
 
+/* ---------- weekly tracker of academic and training hours ---------- */
+function addD(s,n){var d=new Date(s+'T00:00:00Z');d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10)}
+function mondayOf(s){var w=new Date(s+'T00:00:00Z').getUTCDay();return addD(s,-(w===0?6:w-1))}
+function fmtShort(s){return new Date(s+'T00:00:00Z').toLocaleDateString('en-IN',{day:'numeric',month:'short',timeZone:'UTC'})}
+function fmtLong(s){return new Date(s+'T00:00:00Z').toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric',timeZone:'UTC'})}
+var DAYS3=['Mon','Tue','Wed','Thu','Fri','Sat'];
+var rnd1=function(n){return Math.round(n*10)/10};
+function loadList(){return S.loads.slice().sort(function(a,b){return LOAD_KINDS.indexOf(a.kind)-LOAD_KINDS.indexOf(b.kind)||a.name.localeCompare(b.name)})}
+function offFor(classId,date){for(var i=0;i<S.holidays.length;i++){var h=S.holidays[i];if(h.dateFrom<=date&&date<=h.dateTo&&(!h.classId||h.classId===classId))return h}return null}
+function lastWorking(classId,week){for(var i=5;i>=0;i--){var d=addD(week,i);if(!offFor(classId,d))return d}return null}
+function planRow(classId,week,loadId){for(var i=0;i<S.wplans.length;i++){var r=S.wplans[i];if(r.classId===classId&&r.weekStart===week&&r.loadId===loadId)return r}return null}
+function canEditTrack(classId){var u=me();if(u.role==='admin')return true;if(u.role!=='hod')return false;var c=classById(classId);return !!c&&myDepts().indexOf(c.deptId)>-1}
+function sgn(n){return (n>0?'+':'−')+Math.abs(rnd1(n))}
+function varCell(planned,actual,extra){
+  if(actual===null||actual===undefined)return '<td class="vr-wait'+(extra||'')+'">Pending</td>';
+  var d=rnd1(actual-planned);
+  return d===0?'<td class="vr-ok'+(extra||'')+'">✓ On plan</td>':'<td class="vr-bad'+(extra||'')+'">'+sgn(d)+' hrs</td>';
+}
+function weekTotals(classId,week){
+  var p=0,a=0,n=0,rows=S.wplans.filter(function(r){return r.classId===classId&&r.weekStart===week});
+  rows.forEach(function(r){p+=r.planned;if(r.actual!==null&&r.actual!==undefined){a+=r.actual;n++;}});
+  var diff=0;rows.forEach(function(r){if(r.actual!==null&&r.actual!==undefined)diff+=r.actual-r.planned});
+  return {planned:rnd1(p),actual:rnd1(a),entered:n,diff:rnd1(diff)};
+}
+function cumulative(classId){
+  var cut=mondayOf(today),d=0,n=0;
+  S.wplans.forEach(function(r){if(r.classId===classId&&r.weekStart<=cut&&r.actual!==null&&r.actual!==undefined){d+=r.actual-r.planned;n++}});
+  return {diff:rnd1(d),entered:n};
+}
+function vTrack(){
+  var u=me(),isHod=u.role==='hod';
+  var head='<div class="head"><div><h2>Academic tracker</h2><p>Plan the hours of each load type for every week, then record what was actually completed. The week runs Monday to Saturday. Sunday is always off.</p></div></div>';
+  var depts=S.depts.filter(function(d){return !isHod||myDepts().indexOf(d.id)>-1});
+  if(!depts.length)return head+emptyBox('No department is linked to this account. Ask the administrator to set it in Masters → Users.');
+  var loads=loadList();
+  if(!loads.length)return head+emptyBox('No load types yet. The administrator adds them in Masters → Load types.');
+  if(!ui.trDept||!depts.some(function(d){return d.id===ui.trDept}))ui.trDept=depts[0].id;
+  var cls=classesOf(ui.trDept);
+  if(!cls.length)return head+trControls(depts,cls)+emptyBox('This department has no years or sections yet. The administrator adds them in Masters → Years & sections.');
+  if(!ui.trClass||!cls.some(function(c){return c.id===ui.trClass}))ui.trClass=cls[0].id;
+  var week=ui.trWeek,cid=ui.trClass,edit=canEditTrack(cid),lw=lastWorking(cid,week),open=!lw||today>=lw;
+  var strip='<div class="dstrip">'+DAYS3.map(function(n,i){var d=addD(week,i),h=offFor(cid,d);return '<div class="dcell'+(h?' off':' work')+'" title="'+esc(h?h.title:'Working day')+'"><b>'+n+'</b> '+fmtShort(d)+'<span>'+(h?esc(h.title):'Working day')+'</span></div>'}).join('')+'<div class="dcell off" title="Weekly off"><b>Sun</b> '+fmtShort(addD(week,6))+'<span>Weekly off</span></div></div>';
+  var working=DAYS3.filter(function(n,i){return !offFor(cid,addD(week,i))}).length;
+  var rows='',tp=0,ta=0,tn=0,td=0;
+  LOAD_KINDS.forEach(function(kind){
+    var L=loads.filter(function(l){return l.kind===kind});if(!L.length)return;
+    var kp=0,ka=0,kn=0,kd=0;
+    rows+='<tr class="kind"><th colspan="4">'+kind+' load</th></tr>';
+    L.forEach(function(l){
+      var r=planRow(cid,week,l.id),p=r?r.planned:0,a=r&&r.actual!==undefined?r.actual:null;
+      kp+=p;if(a!==null){ka+=a;kn++;kd+=a-p}
+      var pc=edit?'<input class="hrs" type="number" min="0" max="100" step="0.5" inputmode="decimal" value="'+(r?p:'')+'" placeholder="0" data-tr="'+cid+'|'+l.id+'|planned" aria-label="Planned hours, '+esc(l.name)+'">':'<span class="mono">'+(r?p:'–')+'</span>';
+      var ac=edit?'<input class="hrs" type="number" min="0" max="100" step="0.5" inputmode="decimal" value="'+(a===null?'':a)+'" placeholder="'+(open?'hrs':'–')+'"'+(open?'':' disabled title="Opens on the last working day of the week ('+(lw?fmtShort(lw):'')+')"')+' data-tr="'+cid+'|'+l.id+'|actual" aria-label="Actual hours, '+esc(l.name)+'">':'<span class="mono">'+(a===null?'–':a)+'</span>';
+      rows+='<tr><td>'+esc(l.name)+'</td><td>'+pc+'</td><td>'+ac+'</td>'+varCell(p,a)+'</tr>';
+    });
+    rows+='<tr class="sub"><td>'+kind+' total</td><td class="mono">'+rnd1(kp)+'</td><td class="mono">'+(kn?rnd1(ka):'–')+'</td>'+varCell(0,kn?rnd1(kd):null)+'</tr>';
+    tp+=kp;ta+=ka;tn+=kn;td+=kd;
+  });
+  rows+='<tr class="grand"><td>All load types</td><td class="mono">'+rnd1(tp)+'</td><td class="mono">'+(tn?rnd1(ta):'–')+'</td>'+varCell(0,tn?rnd1(td):null)+'</tr>';
+  var note=edit?(open?'Enter what was actually completed for each load type.':'Planned hours can be entered now. Actual hours open on the last working day of the week, '+(lw?fmtLong(lw):'')+'.'):'You can view this plan. Only the department head or an administrator can change it.';
+  var table='<div class="scroll"><table class="tbl trtbl"><thead><tr><th>Load type</th><th>Planned (hrs)</th><th>Actual (hrs)</th><th>Against plan</th></tr></thead><tbody>'+rows+'</tbody></table></div><p class="note" style="margin:6px 0 0">'+note+' Green means the target was met exactly. Red shows how many hours over (+) or under (−) the plan.</p>';
+  var sum=cls.map(function(c){
+    var t=weekTotals(c.id,week),cu=cumulative(c.id);
+    return '<tr'+(c.id===cid?' class="cur"':'')+'><td><button class="link" data-act="trclass" data-id="'+c.id+'"><b>Year '+c.year+' · '+esc(c.section)+'</b></button></td><td class="mono">'+t.planned+'</td><td class="mono">'+(t.entered?t.actual:'–')+'</td>'+varCell(0,t.entered?t.diff:null)+varCell(0,cu.entered?cu.diff:null)+'</tr>';
+  }).join('');
+  var summary='<section><h3 style="margin-bottom:10px">All sections of '+esc(deptById(ui.trDept).code)+', week of '+fmtShort(week)+'</h3><div class="scroll"><table class="tbl trtbl"><thead><tr><th>Section</th><th>Planned (hrs)</th><th>Actual (hrs)</th><th>This week vs plan</th><th>Overall to date vs plan</th></tr></thead><tbody>'+sum+'</tbody></table></div></section>';
+  var offs=S.holidays.filter(function(h){return (!h.classId||(classById(h.classId)&&classById(h.classId).deptId===ui.trDept))&&h.dateTo>=addD(today,-60)}).sort(function(a,b){return b.dateFrom.localeCompare(a.dateFrom)}).slice(0,15);
+  var offTbl='<section><div class="rowhead"><h3>Off days</h3>'+((isHod||u.role==='admin')?'<button class="btn sm" data-act="add" data-t="offday">Mark off day</button>':'')+'</div>'+(offs.length?'<div class="scroll"><table class="tbl"><thead><tr><th>Dates</th><th>Title</th><th>Applies to</th><th></th></tr></thead><tbody>'+offs.map(function(h){var k='off:'+h.id,own=h.classId?canEditTrack(h.classId):u.role==='admin';return '<tr><td class="mono" style="white-space:nowrap">'+(h.dateFrom===h.dateTo?fmtLong(h.dateFrom):fmtShort(h.dateFrom)+' – '+fmtLong(h.dateTo))+'</td><td>'+esc(h.title)+'</td><td>'+(h.classId?esc(classLabel(h.classId)):'<span class="dtag central">All departments</span>')+'</td><td class="act">'+(own?'<button class="btn sm danger" data-act="del" data-k="'+k+'">'+(ui.confirm===k?'Confirm delete':'Delete')+'</button>':'')+'</td></tr>'}).join('')+'</tbody></table></div>':emptyBox('No off days in the last two months or ahead.'))+'<p class="note" style="margin:6px 0 0">Sundays are always off and need no entry. The administrator marks central holidays for everyone. Department heads mark off days for their own years and sections.</p></section>';
+  var wk='<div class="panel"><div class="filters">'+trControlsHTML(depts,cls)+'<div class="seg"><button class="btn sm" data-act="trweek" data-n="-1">Previous week</button><button class="btn sm" data-act="trweek" data-n="0">This week</button><button class="btn sm" data-act="trweek" data-n="1">Next week</button></div><label>Jump to week<input type="date" id="tr-pick" value="'+week+'" data-set="trPick"></label></div></div>';
+  return head+wk+'<section><h3 style="margin-bottom:10px">'+esc(classLabel(cid))+' · '+fmtLong(week)+' to '+fmtLong(addD(week,5))+' <span class="note">· '+working+' working day'+(working===1?'':'s')+'</span></h3>'+strip+'</section><section>'+table+'</section>'+summary+offTbl;
+}
+function trControlsHTML(depts,cls){
+  return (depts.length>1?'<label>Department<select id="tr-dept" data-set="trDept">'+depts.map(function(d){return '<option value="'+d.id+'"'+(d.id===ui.trDept?' selected':'')+'>'+esc(d.code+' – '+d.name)+'</option>'}).join('')+'</select></label>':'')+
+    '<label>Year and section<select id="tr-class" data-set="trClass">'+cls.map(function(c){return '<option value="'+c.id+'"'+(c.id===ui.trClass?' selected':'')+'>Year '+c.year+' · Section '+esc(c.section)+'</option>'}).join('')+'</select></label>';
+}
+function trControls(depts,cls){return '<div class="panel"><div class="filters">'+trControlsHTML(depts,cls)+'</div></div>'}
+function mLoads(){
+  var L=loadList().filter(function(l){return hit(mfv('loads','q'),[l.name,l.kind])&&(!mfv('loads','kind')||l.kind===mfv('loads','kind'))});
+  return mfBar('loads',[mfTxt('loads','Search','Load type name'),mfSel('loads','kind','Kind',LOAD_KINDS.map(function(k){return [k,k]}))],L.length,S.loads.length)+'<div class="scroll"><table class="tbl"><thead><tr><th>Load type</th><th>Kind</th><th>Weekly plans using it</th><th></th></tr></thead><tbody>'+
+  L.map(function(l){var k='load:'+l.id;return '<tr><td><b>'+esc(l.name)+'</b></td><td><span class="badge '+(l.kind==='Academic'?'b-ok':'b-wait')+'">'+l.kind+'</span></td><td class="mono">'+S.wplans.filter(function(r){return r.loadId===l.id}).length+'</td><td class="act"><button class="btn sm" data-act="edit" data-t="load" data-id="'+l.id+'">Edit</button><button class="btn sm danger" data-act="del" data-k="'+k+'">'+(ui.confirm===k?'Confirm delete':'Delete')+'</button></td></tr>'}).join('')+'</tbody></table></div>'+(L.length?'':noMatch(S.loads.length,'No load types yet. Add theory, lab, aptitude training and so on.'));
+}
+function mOffdays(){
+  var L=S.holidays.slice().sort(function(a,b){return b.dateFrom.localeCompare(a.dateFrom)}).filter(function(h){return hit(mfv('offdays','q'),[h.title,h.classId?classLabel(h.classId):'all departments',h.by||''])&&(!mfv('offdays','scope')||(mfv('offdays','scope')==='all'?!h.classId:!!h.classId))});
+  return mfBar('offdays',[mfTxt('offdays','Search','Title or section'),mfSel('offdays','scope','Applies to',[['all','Whole campus'],['class','A year and section']])],L.length,S.holidays.length)+'<div class="scroll"><table class="tbl"><thead><tr><th>Dates</th><th>Days</th><th>Title</th><th>Applies to</th><th>Added by</th><th></th></tr></thead><tbody>'+
+  L.map(function(h){var k='off:'+h.id,n=Math.round((Date.parse(h.dateTo)-Date.parse(h.dateFrom))/864e5)+1;return '<tr><td class="mono" style="white-space:nowrap">'+(h.dateFrom===h.dateTo?fmtLong(h.dateFrom):fmtShort(h.dateFrom)+' – '+fmtLong(h.dateTo))+'</td><td class="mono">'+n+'</td><td><b>'+esc(h.title)+'</b></td><td>'+(h.classId?esc(classLabel(h.classId)):'<span class="dtag central">All departments</span>')+'</td><td class="note">'+esc(h.by||'')+'</td><td class="act"><button class="btn sm" data-act="edit" data-t="offday" data-id="'+h.id+'">Edit</button><button class="btn sm danger" data-act="del" data-k="'+k+'">'+(ui.confirm===k?'Confirm delete':'Delete')+'</button></td></tr>'}).join('')+'</tbody></table></div>'+(L.length?'':noMatch(S.holidays.length,'No off days yet. Add central holidays such as Gandhi Jayanti, with a date range for more than one day.'));
+}
+function scopeHTML(val){
+  var u=me(),admin=u.role==='admin',o='';
+  if(admin)o+='<option value=""'+(val===''?' selected':'')+'>All departments (whole campus)</option>';
+  var ds=S.depts.filter(function(d){return admin||myDepts().indexOf(d.id)>-1});
+  ds.forEach(function(d){var cl=classesOf(d.id);if(!cl.length)return;
+    o+='<optgroup label="'+esc(d.code+' – '+d.name)+'"><option value="D:'+d.id+'"'+(val==='D:'+d.id?' selected':'')+'>All sections of '+esc(d.code)+'</option>'+cl.map(function(c){return '<option value="'+c.id+'"'+(val===c.id?' selected':'')+'>Year '+c.year+' · Section '+esc(c.section)+'</option>'}).join('')+'</optgroup>'});
+  return '<select id="f-scope" name="scope">'+o+'</select>';
+}
+
 function vEvents(){
+
   var upc=S.events.filter(function(e){return e.date>=today}).sort(function(a,b){return a.date.localeCompare(b.date)});
   var past=S.events.filter(function(e){return e.date<today}).sort(function(a,b){return b.date.localeCompare(a.date)});
   var th='<thead><tr><th>Date</th><th>Time</th><th>Venue</th><th>Event</th><th>Requested by</th><th>Status</th><th></th></tr></thead>';
@@ -485,11 +582,12 @@ function mAlloc(){
   L.map(function(r){return '<tr><td><b>'+esc(r.name)+'</b></td><td>'+tcode(r.type)+esc(r.type)+'</td><td class="mono">'+r.capacity+'</td><td class="mono">'+S.tt.filter(function(t){return t.resId===r.id}).length+'</td><td><select id="alloc-'+r.id+'" data-alloc="'+r.id+'" aria-label="Allocate '+esc(r.name)+'">'+deptOpts('Central pool (no department)').map(function(o){return '<option value="'+o[0]+'"'+(o[0]===(r.deptId||'')?' selected':'')+'>'+esc(o[1])+'</option>'}).join('')+'</select></td></tr>'}).join('')+'</tbody></table></div>'+(L.length?'':noMatch(S.resources.length,'No venues yet.'));
 }
 function vMasters(){
-  var subs=[['depts','Departments'],['classes','Years & sections'],['slots','Time slots'],['bld','Buildings'],['floors','Floors'],['res','Venues'],['users','Users'],['alloc','Allocation']];
-  var add={depts:['dept','Add department'],classes:['class','Add year & sections'],slots:['slot','Add time slot'],bld:['building','Add building'],floors:['floor','Add floor'],res:['resource','Add venue'],users:['user','Add user']}[ui.mtab];
-  var body={depts:mDepts,classes:mClasses,slots:mSlots,bld:mBuildings,floors:mFloors,res:mRes,users:mUsers,alloc:mAlloc}[ui.mtab]();
+  var subs=[['depts','Departments'],['classes','Years & sections'],['slots','Time slots'],['bld','Buildings'],['floors','Floors'],['res','Venues'],['users','Users'],['alloc','Allocation'],['loads','Load types'],['offdays','Off days']];
+  var add={depts:['dept','Add department'],classes:['class','Add year & sections'],slots:['slot','Add time slot'],bld:['building','Add building'],floors:['floor','Add floor'],res:['resource','Add venue'],users:['user','Add user'],loads:['load','Add load type'],offdays:['offday','Add off day']}[ui.mtab];
+  var body={depts:mDepts,classes:mClasses,slots:mSlots,bld:mBuildings,floors:mFloors,res:mRes,users:mUsers,alloc:mAlloc,loads:mLoads,offdays:mOffdays}[ui.mtab]();
+  var blurb2={loads:'Types of teaching and training hours that department heads plan and track every week, such as theory, laboratory or aptitude training.',offdays:'Central holidays for every department. Use a date range for more than one day. Department heads mark their own sections’ off days in the Academic tracker. Sundays are always off.'};
   var blurb={depts:'Departments that own venues and timetables.',classes:'Years and sections of each department. Department heads pick them from a dropdown when they schedule a class.',slots:'The periods of a college day. Timetables and bookings use these.',bld:'Buildings and blocks. They appear as a dropdown when you create a venue.',floors:'Floors, ordered by level. They appear as a dropdown when you create a venue.',res:'Inventory of lecture theatres, computer labs, seminar halls and auditoriums.',users:'Everyone who signs in, with a role and, for department heads, a department.',alloc:'Assign each venue to a department or leave it in the central pool.'}[ui.mtab];
-  return '<div class="head"><div><h2>Masters</h2><p>'+blurb+'</p></div>'+(add?'<button class="btn primary" data-act="add" data-t="'+add[0]+'">'+add[1]+'</button>':'')+'</div>'+
+  return '<div class="head"><div><h2>Masters</h2><p>'+(blurb2[ui.mtab]||blurb)+'</p></div>'+(add?'<button class="btn primary" data-act="add" data-t="'+add[0]+'">'+add[1]+'</button>':'')+'</div>'+
     '<div class="seg">'+subs.map(function(s){return '<button class="btn sm'+(ui.mtab===s[0]?' on':'')+'" data-act="mtab" data-v="'+s[0]+'">'+s[1]+'</button>'}).join('')+'</div>'+body;
 }
 
@@ -528,6 +626,11 @@ function modalHTML(){
       body=fld('Label',tin('label',v.label,'required maxlength="14"'))+'<div class="frow">'+fld('Start',tin('start',v.start||'09:00','type="time" required'))+fld('End',tin('end',v.end||'10:00','type="time" required'))+'</div><label class="chk"><input type="checkbox" name="isBreak" value="1"'+(v.isBreak?' checked':'')+'> This is a break (lunch). No classes or events can be placed in it.</label>';break;
     case 'resource':title=(v.id?'Edit':'Add')+' venue';
       body=fld('Name',tin('name',v.name,'required'))+'<div class="frow">'+fld('Type',sel('type',TYPES.map(function(t){return [t,t]}),v.type||TYPES[0]))+fld('Seats',tin('capacity',v.capacity||'','type="number" min="1" required'))+'</div>'+'<div class="frow">'+fld('Building',sel('buildingId',S.buildings.map(function(b){return [b.id,b.name]}),v.buildingId||(S.buildings[0]||{}).id))+fld('Floor',sel('floorId',floorList().map(function(f){return [f.id,f.name]}),v.floorId||(floorList()[0]||{}).id))+'</div>'+fld('Equipment',tin('equipment',v.equipment))+fld('Allocated to',sel('deptId',deptOpts('Central pool (no department)'),v.deptId||''));break;
+    case 'load':title=(v.id?'Edit':'Add')+' load type';
+      body=fld('Name',tin('name',v.name,'required maxlength="60" placeholder="Theory lectures"'))+fld('Kind',sel('kind',LOAD_KINDS.map(function(k){return [k,k]}),v.kind||'Academic'));break;
+    case 'offday':title=(v.id?'Edit':'Mark')+' off day';
+      extra='<p class="ctx">'+(me().role==='admin'?'Choose “All departments” for a central holiday, or one year and section.':'The off day applies to the years and sections you choose.')+' Use the last day to cover more than one day. Sundays are already off.</p>';
+      body=fld('Title',tin('title',v.title,'required maxlength="120" placeholder="Gandhi Jayanti"'))+'<div class="frow">'+fld('First day',tin('dateFrom',v.dateFrom||today,'type="date" required'))+fld('Last day',tin('dateTo',v.dateTo||v.dateFrom||today,'type="date" required'))+'</div>'+fld('Applies to',scopeHTML(v.scope!==undefined?v.scope:(v.classId||(me().role==='admin'?'':'D:'+ui.trDept))));break;
     case 'user':title=(v.id?'Edit':'Add')+' user';
       body=fld('Full name',tin('name',v.name,'required'))+fld('Email (used to sign in)',tin('email',v.email,'type="email" required autocomplete="off"'))+fld(v.id?'New password (leave empty to keep the current one)':'Password',tin('password','','type="password" minlength="8" autocomplete="new-password"'+(v.id?'':' required')))+'<div class="frow">'+fld('Role',sel('role',Object.keys(ROLE).map(function(k){return [k,ROLE[k]]}),v.role||'stakeholder'))+fld('Main department (department heads)',sel('deptId',deptOpts('None'),v.deptId||''))+'</div>'+'<fieldset class="move"><legend>Also manages (department heads only)</legend><div class="chips">'+S.depts.map(function(dx){return '<label class="chk"><input type="checkbox" name="moreDeptIds" value="'+dx.id+'"'+((v.moreDeptIds||[]).indexOf(dx.id)>-1?' checked':'')+'> '+esc(dx.code)+'</label>'}).join('')+'</div><p class="note" style="margin:6px 0 0">A head can build timetables, set lunch breaks, mark classes away and lend venues for every department ticked here, as well as the main one.</p></fieldset>';break;
     case 'tt':{var r=resById(v.resId),s=slotById(v.slotId);title=(v.id?'Edit':'Add')+' class';
@@ -586,7 +689,7 @@ function render(){
   head.innerHTML='<div class="bar">'+brand+
     '<div class="who"><span id="sync" class="syncwrap"></span><span class="me" title="'+esc(u.email)+'"><b>'+esc(u.name)+'</b> · '+ROLE[u.role]+'</span><button class="btn sm" data-act="logout">Sign out</button><button class="btn sm" data-act="logoutall" title="Sign out on every device where you are signed in">Sign out everywhere</button></div></div>'+
     '<nav class="tabs" role="tablist" aria-label="Sections">'+tabs.map(function(t){return '<button class="tab" role="tab" aria-selected="'+(t[0]===ui.tab)+'" data-act="tab" data-v="'+t[0]+'">'+t[1]+'</button>'}).join('')+'</nav>';
-  document.getElementById('main').innerHTML={overview:vOverview,avail:vAvail,events:vEvents,lend:vLend,timetable:vTimetable,classes:vClasses,changes:vChanges,masters:vMasters}[ui.tab]();
+  document.getElementById('main').innerHTML={overview:vOverview,avail:vAvail,events:vEvents,lend:vLend,track:vTrack,timetable:vTimetable,classes:vClasses,changes:vChanges,masters:vMasters}[ui.tab]();
   document.getElementById('modalRoot').innerHTML=modalHTML();
   document.getElementById('foot').innerHTML='<span>Signed in as '+esc(u.email||u.name)+'</span>';
   updateSync();
@@ -638,6 +741,30 @@ function submitForm(type,d){
     if(S.floors.some(function(x){return x.id!==v.id&&(x.name.toLowerCase()===v.name.toLowerCase()||x.level===lv)}))return fail('A floor with this name or level already exists.',d);
     if(v.id){o=floorById(v.id);o.name=v.name;o.level=lv}else S.floors.push({id:uid('f'),name:v.name,level:lv});
     return done('Floor saved.');
+  }
+  if(type==='load'){
+    v.name=(v.name||'').trim();
+    if(!v.name)return fail('Enter a name such as Theory lectures.',d);
+    if(LOAD_KINDS.indexOf(v.kind)<0)return fail('Choose Academic or Training.',d);
+    if(S.loads.some(function(l){return l.id!==v.id&&l.name.toLowerCase()===v.name.toLowerCase()}))return fail('A load type with that name already exists.',d);
+    if(v.id){o=S.loads.filter(function(l){return l.id===v.id})[0];o.name=v.name;o.kind=v.kind}else S.loads.push({id:uid('l'),name:v.name,kind:v.kind});
+    return done('Load type saved.');
+  }
+  if(type==='offday'){
+    v.title=(v.title||'').trim();
+    if(!v.title)return fail('Enter a title such as Gandhi Jayanti.',d);
+    if(!v.dateFrom||!v.dateTo)return fail('Choose the first and last day.',d);
+    if(v.dateTo<v.dateFrom)return fail('The last day cannot be before the first day.',d);
+    if((Date.parse(v.dateTo)-Date.parse(v.dateFrom))/864e5>366)return fail('An off-day range can be at most one year.',d);
+    var sc=v.scope||'',ids;
+    if(sc==='')ids=[null];
+    else if(sc.indexOf('D:')===0)ids=classesOf(sc.slice(2)).map(function(c){return c.id});
+    else ids=[sc];
+    if(sc===''&&me().role!=='admin')return fail('Choose the years and sections this off day applies to.',d);
+    if(!ids.length)return fail('That department has no years or sections yet.',d);
+    if(v.id){o=S.holidays.filter(function(h){return h.id===v.id})[0];o.title=v.title;o.dateFrom=v.dateFrom;o.dateTo=v.dateTo;o.classId=ids[0];if(ids.length>1)ids.slice(1).forEach(function(cid){S.holidays.push({id:uid('h'),dateFrom:v.dateFrom,dateTo:v.dateTo,title:v.title,classId:cid,by:me().name})})}
+    else ids.forEach(function(cid){S.holidays.push({id:uid('h'),dateFrom:v.dateFrom,dateTo:v.dateTo,title:v.title,classId:cid,by:me().name})});
+    return done('Off day saved.');
   }
   if(type==='slot'){
     v.label=(v.label||'').trim();
@@ -786,6 +913,11 @@ function tryDelete(k){
     if(id===ui.userId)return toast('You cannot delete the account you are using.',true);
     if(u.role==='admin'&&S.users.filter(function(x){return x.role==='admin'}).length<2)return toast('Keep at least one administrator.',true);
     S.users=S.users.filter(function(x){return x.id!==id});
+  } else if(kind==='load'){
+    n=S.wplans.filter(function(r){return r.loadId===id}).length;
+    if(n)return toast('This load type is used in '+n+' weekly plan(s), so it cannot be deleted.',true);
+    S.loads=S.loads.filter(function(x){return x.id!==id});
+  } else if(kind==='off'){S.holidays=S.holidays.filter(function(x){return x.id!==id})
   } else if(kind==='ev'){S.events=S.events.filter(function(x){return x.id!==id})}
   save();toast('Deleted.');
 }
@@ -810,10 +942,12 @@ document.addEventListener('click',function(e){
     case 'avday':ui.avDate=d.n==='0'?today:addDays(ui.avDate,+d.n);break;
     case 'togglePast':ui.evShowPast=!ui.evShowPast;break;
     case 'add':open(d.t,{});return;
-    case 'edit':{var src={dept:S.depts,class:S.classes,slot:S.slots,resource:S.resources,user:S.users,building:S.buildings,floor:S.floors}[d.t].filter(function(x){return x.id===d.id})[0];open(d.t,Object.assign({},src));return}
+    case 'edit':{var src={dept:S.depts,class:S.classes,slot:S.slots,resource:S.resources,user:S.users,building:S.buildings,floor:S.floors,load:S.loads,offday:S.holidays}[d.t].filter(function(x){return x.id===d.id})[0];open(d.t,Object.assign({},src));return}
     case 'lunch':{var ldd=deptById(d.id);if(ldd)open('lunch',{id:ldd.id,lunch:(ldd.lunchSlots||[]).slice()});return}
     case 'addbreak':{var eb=S.slots.filter(function(x){return x.isBreak})[0];open('slot',eb?Object.assign({},eb):{label:'Lunch',start:'13:15',end:'14:00',isBreak:true});return}
     case 'fullday':{var fl=slotOpts();open('fullday',{resId:ui.ttMode==='week'?ui.ttRes:'',days:[ui.ttDay],from:fl.length?fl[0][0]:'',to:fl.length?fl[fl.length-1][0]:'',title:'',faculty:'',classId:ui.lastClass||''});return}
+    case 'trweek':ui.trWeek=(+d.n===0)?mondayOf(today):addD(ui.trWeek,7*(+d.n));break;
+    case 'trclass':ui.trClass=d.id;window.scrollTo(0,0);break;
     case 'lend':openLend(d.res);return;
     case 'book':openBook(d.res,d.from,d.to);return;
     case 'ttcell':{var ex=d.id?S.tt.filter(function(t){return t.id===d.id})[0]:null;open('tt',ex?Object.assign({},ex,{mvDay:ex.day,mvSlot:ex.slotId,moveTo:ex.resId}):{resId:d.res,day:+d.day,slotId:d.slot,title:'',faculty:'',classId:''});return}
@@ -828,6 +962,15 @@ document.addEventListener('click',function(e){
 });
 document.addEventListener('change',function(e){
   var mfs=e.target.closest('select[data-mf]');if(mfs){ui.mf[mfs.dataset.mf]=mfs.value;render();return}
+  var tr=e.target.closest('[data-tr]');
+  if(tr){
+    var tp=tr.dataset.tr.split('|'),tcid=tp[0],tlid=tp[1],tf=tp[2],raw=tr.value.trim(),tv;
+    if(raw==='')tv=tf==='planned'?0:null;
+    else{tv=Number(raw);if(!isFinite(tv)||tv<0||tv>100){toast('Enter hours between 0 and 100.',true);render();return}tv=Math.round(tv*10)/10}
+    var trow=planRow(tcid,ui.trWeek,tlid);
+    if(!trow){if(tv===null||(tf==='planned'&&tv===0))return;trow={id:uid('w'),classId:tcid,weekStart:ui.trWeek,loadId:tlid,planned:0,actual:null};S.wplans.push(trow)}
+    trow[tf]=tv;save();render();return;
+  }
   var lr=e.target.closest('[data-lendref]');
   if(lr&&ui.modal&&ui.modal.type==='lend'){var lfm=lr.closest('form'),lfd={};new FormData(lfm).forEach(function(val,key){lfd[key]=val});ui.modal.vals=Object.assign({},ui.modal.vals,lfd);ui.modal.err='';render();return}
   var mv=e.target.closest('[data-mv]');
@@ -845,6 +988,8 @@ document.addEventListener('change',function(e){
   ui[k]=el.value;
   if(k==='chNote')return;
   if(k==='ttDept')ui.ttRes=null;
+  if(k==='trDept')ui.trClass='';
+  if(k==='trPick'){if(!el.value)return;ui.trWeek=mondayOf(el.value)}
   if(k==='clDept')ui.clId=null;
   if(k==='chDept')ui.chClass='';
   if(k==='chFrom'&&el.value&&ui.chTo<el.value)ui.chTo=el.value;
