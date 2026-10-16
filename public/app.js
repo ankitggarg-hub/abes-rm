@@ -102,7 +102,7 @@ function updateSync(){var el=document.getElementById('sync');if(el)el.innerHTML=
 
 var today=iso(new Date());
 var ui={booting:true,loginErr:'',loginBusy:false,userId:null,tab:'overview',mtab:'depts',ttDept:null,ttRes:null,ttMode:'week',ttDay:0,
-  trDept:null,trClass:'',trWeek:mondayOf(today),trMonth:today.slice(0,7),avDate:today,lnDate:today,lnFrom:null,lnTo:null,lnType:'',avFrom:null,avTo:null,avType:'',avCap:'',avBld:'',avFl:'',mf:{},chDept:null,chClass:'',chFrom:today,chTo:today,chSlotA:'',chSlotB:'',chReason:'Industrial visit',chNote:'',modal:null,confirm:null,evShowPast:false};
+  trDept:null,trView:'plan',rpDept:null,rpPeriod:'all',rpKind:'',trClass:'',trWeek:mondayOf(today),trMonth:today.slice(0,7),avDate:today,lnDate:today,lnFrom:null,lnTo:null,lnType:'',avFrom:null,avTo:null,avType:'',avCap:'',avBld:'',avFl:'',mf:{},chDept:null,chClass:'',chFrom:today,chTo:today,chSlotA:'',chSlotB:'',chReason:'Industrial visit',chNote:'',modal:null,confirm:null,evShowPast:false};
 
 /* ---------- selectors ---------- */
 var slotList=function(){return S.slots.slice().sort(function(a,b){return a.start.localeCompare(b.start)})};
@@ -391,16 +391,16 @@ function cumulative(classId){
   S.wplans.forEach(function(r){if(r.classId===classId&&r.weekStart<=cut&&r.actual!==null&&r.actual!==undefined){d+=r.actual-r.planned;n++}});
   return {diff:rnd1(d),entered:n};
 }
-function vTrack(){
+function vTrackPlan(){
   var u=me(),isHod=u.role==='hod';
   var head='<div class="head"><div><h2>Academic tracker</h2><p>Plan the hours of each load type for every week, then record what was actually completed. The week runs Monday to Friday. Saturday and Sunday are off unless converted to working days.</p></div></div>';
   var depts=S.depts.filter(function(d){return !isHod||myDepts().indexOf(d.id)>-1});
-  if(!depts.length)return head+emptyBox('No department is linked to this account. Ask the administrator to set it in Masters → Users.');
+  if(!depts.length)return head+trNav()+emptyBox('No department is linked to this account. Ask the administrator to set it in Masters → Users.');
   var loads=loadList();
-  if(!loads.length)return head+emptyBox('No load types yet. The administrator adds them in Masters → Load types.');
+  if(!loads.length)return head+trNav()+emptyBox('No load types yet. The administrator adds them in Masters → Load types.');
   if(!ui.trDept||!depts.some(function(d){return d.id===ui.trDept}))ui.trDept=depts[0].id;
   var cls=classesOf(ui.trDept);
-  if(!cls.length)return head+trControls(depts,cls)+emptyBox('This department has no years or sections yet. The administrator adds them in Masters → Years & sections.');
+  if(!cls.length)return head+trNav()+trControls(depts,cls)+emptyBox('This department has no years or sections yet. The administrator adds them in Masters → Years & sections.');
   if(!ui.trClass||(trIsGroup(ui.trClass)?!trIds(ui.trClass).length:!cls.some(function(c){return c.id===ui.trClass})))ui.trClass=cls[0].id;
   var ws=weeksOfMonth(ui.trMonth);
   if(ws.indexOf(ui.trWeek)<0)ui.trWeek=ws.indexOf(mondayOf(today))>-1?mondayOf(today):ws[0];
@@ -454,7 +454,97 @@ function vTrack(){
   var offTbl='<section><div class="rowhead"><h3>Off days and working days</h3>'+((isHod||u.role==='admin')?'<button class="btn sm" data-act="add" data-t="offday">Mark off or working day</button>':'')+'</div>'+trCalendar(cid,edit||u.role==='admin',glabel)+(offs.length?'<div class="scroll"><table class="tbl"><thead><tr><th>Dates</th><th>Type</th><th>Title</th><th>Applies to</th><th></th></tr></thead><tbody>'+offs.map(function(h){var k='off:'+h.id,own=h.classId?canEditTrack(h.classId):u.role==='admin';return '<tr><td class="mono" style="white-space:nowrap">'+(h.dateFrom===h.dateTo?fmtLong(h.dateFrom):fmtShort(h.dateFrom)+' – '+fmtLong(h.dateTo))+'</td><td>'+kindTag(h)+'</td><td>'+esc(h.title)+'</td><td>'+(h.classId?esc(classLabel(h.classId)):'<span class="dtag central">All departments</span>')+'</td><td class="act">'+(own?'<button class="btn sm danger" data-act="del" data-k="'+k+'">'+(ui.confirm===k?'Confirm delete':'Delete')+'</button>':'')+'</td></tr>'}).join('')+'</tbody></table></div>':emptyBox('No off days in the last two months or ahead.'))+'<p class="note" style="margin:6px 0 0">Saturdays and Sundays are off without any entry. To work on one, choose “Working day” when marking, or click the date in the calendar. The administrator sets days for everyone. Department heads set them for their own years and sections.</p></section>';
   var monthLabel=new Date(ui.trMonth+'-01T00:00:00Z').toLocaleDateString('en-IN',{month:'long',year:'numeric',timeZone:'UTC'});
   var wk='<div class="panel"><div class="filters">'+trControlsHTML(depts,cls,ws)+'<button class="btn sm" data-act="trthis">This week</button></div>'+(edit&&!grp?'<div class="filters copyrow"><label>Copy this week’s planned hours to'+scopeHTML('D:'+ui.trDept,true,'tr-copy')+'</label><button class="btn sm" data-act="trcopy">Copy plan</button><span class="note">Copies the plan of '+esc(glabel)+' for '+fmtShort(week)+' – '+fmtShort(addD(week,4))+'. Actual hours are never copied.</span></div>':'')+'</div>';
-  return head+wk+'<section><h3 style="margin-bottom:10px">'+esc(glabel)+' · '+fmtShort(week)+' – '+fmtLong(addD(week,4))+' <span class="note">· '+working+' working day'+(working===1?'':'s')+'</span></h3>'+strip+'</section><section><h3 style="margin-bottom:10px">Plan for '+monthLabel+'</h3>'+table+'</section>'+summary+offTbl;
+  return head+trNav()+wk+'<section><h3 style="margin-bottom:10px">'+esc(glabel)+' · '+fmtShort(week)+' – '+fmtLong(addD(week,4))+' <span class="note">· '+working+' working day'+(working===1?'':'s')+'</span></h3>'+strip+'</section><section><h3 style="margin-bottom:10px">Plan for '+monthLabel+'</h3>'+table+'</section>'+summary+offTbl;
+}
+
+function vTrack(){return ui.trView==='report'?vTrackReport():ui.trView==='board'?vTrackBoard():vTrackPlan()}
+function trNav(){
+  return '<div class="seg trnav" role="tablist" aria-label="Tracker views">'+[['plan','Weekly plan'],['report','Progress report'],['board','Leaderboard']].map(function(v){return '<button class="btn'+(ui.trView===v[0]?' on':'')+'" role="tab" aria-selected="'+(ui.trView===v[0])+'" data-act="trview" data-v="'+v[0]+'">'+v[1]+'</button>'}).join('')+'</div>';
+}
+function pct(x){return x===null||x===undefined?'–':Math.round(x*100)+'%'}
+function tone(x){return x===null?'':x>=0.95?'ok':x>=0.8?'mid':'bad'}
+function meter(x){return '<span class="meter"><i class="'+tone(x)+'" style="width:'+(x===null?0:Math.round(x*100))+'%"></i></span>'}
+function trIndex(){var m={};S.wplans.forEach(function(r){(m[r.classId]||(m[r.classId]=[])).push(r)});return m}
+function periodWeeks(per){
+  var cur=mondayOf(today);
+  if(per&&per!=='all')return weeksOfMonth(per).filter(function(w){return w<=cur});
+  var seen={};S.wplans.forEach(function(r){if(r.weekStart<=cur)seen[r.weekStart]=1});return Object.keys(seen).sort();
+}
+function trStats(cids,W,kind,idx){
+  var ws={};W.forEach(function(w){ws[w]=1});
+  var okLoad={};S.loads.forEach(function(l){if(!kind||l.kind===kind)okLoad[l.id]=1});
+  var o={planned:0,actual:0,pp:0,abs:0,diff:0,closed:0,reported:0,byLoad:{},byWeek:{}};
+  cids.forEach(function(cid){
+    var per={};
+    (idx[cid]||[]).forEach(function(r){
+      if(!ws[r.weekStart]||!okLoad[r.loadId])return;
+      var w=per[r.weekStart]||(per[r.weekStart]={p:0,rep:false});w.p+=r.planned;o.planned+=r.planned;
+      var bw=o.byWeek[r.weekStart]||(o.byWeek[r.weekStart]={p:0,a:0,pp:0,abs:0});bw.p+=r.planned;
+      var bl=o.byLoad[r.loadId]||(o.byLoad[r.loadId]={p:0,a:0,pp:0,abs:0});
+      if(r.actual!==null&&r.actual!==undefined){
+        w.rep=true;var d=r.actual-r.planned;
+        o.actual+=r.actual;o.pp+=r.planned;o.abs+=Math.abs(d);o.diff+=d;
+        bw.a+=r.actual;bw.pp+=r.planned;bw.abs+=Math.abs(d);bl.a+=r.actual;bl.pp+=r.planned;bl.abs+=Math.abs(d);
+      }
+    });
+    Object.keys(per).forEach(function(w){var lw=lastWorking(cid,w);if(per[w].p>0&&lw&&lw<today){o.closed++;if(per[w].rep)o.reported++}});
+  });
+  o.adh=o.pp>0?Math.max(0,1-o.abs/o.pp):null;
+  o.rep=o.closed>0?o.reported/o.closed:null;
+  o.score=(o.adh===null&&o.rep===null)?null:(o.adh===null?o.rep:(o.rep===null?o.adh:0.7*o.adh+0.3*o.rep));
+  return o;
+}
+function periodSel(){
+  var mo=monthOptions().filter(function(m){return m<=today.slice(0,7)});
+  return '<label>Period<select data-set="rpPeriod"><option value="all"'+(ui.rpPeriod==='all'?' selected':'')+'>All weeks to date</option>'+mo.slice().reverse().map(function(m){return '<option value="'+m+'"'+(ui.rpPeriod===m?' selected':'')+'>'+new Date(m+'-01T00:00:00Z').toLocaleDateString('en-IN',{month:'long',year:'numeric',timeZone:'UTC'})+'</option>'}).join('')+'</select></label>'+
+    '<label>Hours<select data-set="rpKind"><option value="">Academic and training</option>'+LOAD_KINDS.map(function(k){return '<option value="'+k+'"'+(ui.rpKind===k?' selected':'')+'>'+k+' only</option>'}).join('')+'</select></label>';
+}
+function periodName(){return ui.rpPeriod==='all'?'all weeks to date':new Date(ui.rpPeriod+'-01T00:00:00Z').toLocaleDateString('en-IN',{month:'long',year:'numeric',timeZone:'UTC'})}
+function vTrackReport(){
+  var head='<div class="head"><div><h2>Academic tracker</h2><p>How planned hours compare with completed hours, by section, load type and week.</p></div></div>';
+  var depts=S.depts.filter(function(d){return classesOf(d.id).length});
+  if(!depts.length)return head+trNav()+emptyBox('No department has years and sections yet.');
+  if(!ui.rpDept||!depts.some(function(d){return d.id===ui.rpDept}))ui.rpDept=(depts.filter(function(d){return myDepts().indexOf(d.id)>-1})[0]||depts[0]).id;
+  var d=deptById(ui.rpDept),cls=classesOf(d.id),idx=trIndex(),W=periodWeeks(ui.rpPeriod),K=ui.rpKind;
+  var T=trStats(cls.map(function(c){return c.id}),W,K,idx);
+  var ctl='<div class="panel"><div class="filters"><label>Department<select data-set="rpDept">'+depts.map(function(x){return '<option value="'+x.id+'"'+(x.id===d.id?' selected':'')+'>'+esc(x.code+' – '+x.name)+'</option>'}).join('')+'</select></label>'+periodSel()+'<button class="btn sm" data-act="rpcsv">Download CSV</button><button class="btn sm" data-act="rpprint">Print</button></div></div>';
+  if(!W.length||!T.planned)return head+trNav()+ctl+emptyBox('No hours were planned for '+esc(d.code)+' in '+periodName()+'. Plans appear here once department heads enter them in the Weekly plan.');
+  var net=rnd1(T.diff);
+  var tiles='<div class="strip trtiles"><div><b>'+rnd1(T.planned)+'</b><span>Hours planned</span></div><div><b>'+rnd1(T.actual)+'</b><span>Hours completed</span></div><div><b class="'+tone(T.adh)+'">'+pct(T.adh)+'</b><span>Plan adherence</span></div><div><b>'+T.reported+'/'+T.closed+'</b><span>Weeks reported</span></div><div><b class="'+(net===0?'ok':'bad')+'">'+(T.pp?(net===0?'On plan':sgn(net)):'–')+'</b><span>Net against plan, hrs</span></div></div>';
+  var sec=cls.map(function(c){var s2=trStats([c.id],W,K,idx);return {c:c,s:s2}});
+  var secRows=sec.map(function(x){var s2=x.s,df=rnd1(s2.diff);return '<tr><td><b>Year '+x.c.year+' · '+esc(x.c.section)+'</b></td><td class="mono">'+rnd1(s2.planned)+'</td><td class="mono">'+(s2.pp?rnd1(s2.actual):'–')+'</td>'+(s2.pp?(df===0?'<td class="vr-ok">✓ On plan</td>':'<td class="vr-bad">'+sgn(df)+' hrs</td>'):'<td class="vr-wait">Pending</td>')+'<td>'+meter(s2.adh)+' <span class="mono">'+pct(s2.adh)+'</span></td><td class="mono">'+s2.reported+'/'+s2.closed+'</td></tr>'}).join('');
+  var secTbl='<section><h3 style="margin-bottom:10px">By year and section</h3><div class="scroll"><table class="tbl trtbl"><thead><tr><th>Section</th><th>Planned (hrs)</th><th>Completed (hrs)</th><th>Against plan</th><th>Adherence</th><th>Weeks reported</th></tr></thead><tbody>'+secRows+'</tbody></table></div></section>';
+  var ld=loadList().filter(function(l){return !K||l.kind===K}).map(function(l){var b=T.byLoad[l.id];if(!b)return '';var df=rnd1(b.a-b.pp),ad=b.pp>0?Math.max(0,1-b.abs/b.pp):null;return '<tr><td>'+esc(l.name)+' <span class="note">'+l.kind+'</span></td><td class="mono">'+rnd1(b.pp)+'</td><td class="mono">'+rnd1(b.a)+'</td>'+(b.pp?(df===0?'<td class="vr-ok">✓ On plan</td>':'<td class="vr-bad">'+sgn(df)+' hrs</td>'):'<td class="vr-wait">–</td>')+'<td>'+meter(ad)+' <span class="mono">'+pct(ad)+'</span></td></tr>'}).join('');
+  var ldTbl='<section><h3 style="margin-bottom:10px">By load type</h3><div class="scroll"><table class="tbl trtbl"><thead><tr><th>Load type</th><th>Planned in reported weeks</th><th>Completed</th><th>Against plan</th><th>Adherence</th></tr></thead><tbody>'+ld+'</tbody></table></div></section>';
+  var wk=Object.keys(T.byWeek).sort().slice(-10),mx=1;wk.forEach(function(w){mx=Math.max(mx,T.byWeek[w].p,T.byWeek[w].a)});
+  var trend='<section><h3 style="margin-bottom:10px">Week by week</h3><div class="panel"><div class="trend">'+wk.map(function(w){var b=T.byWeek[w],ad=b.pp>0?Math.max(0,1-b.abs/b.pp):null;return '<div class="tcol" title="Week of '+fmtLong(w)+': planned '+rnd1(b.p)+', completed '+(b.pp?rnd1(b.a):'not yet')+'"><div class="bars"><i class="bp" style="height:'+Math.round(b.p/mx*100)+'%"></i><i class="ba '+(b.pp?tone(ad):'')+'" style="height:'+(b.pp?Math.round(b.a/mx*100):0)+'%"></i></div><small>'+fmtShort(w)+'</small><small class="mono">'+(b.pp?pct(ad):'–')+'</small></div>'}).join('')+'</div><p class="note" style="margin:8px 0 0"><span class="lg wk"></span>Planned <span class="lg work"></span>Completed, coloured by how close it came to plan. Hours are summed across all sections of '+esc(d.code)+'.</p></div></section>';
+  return head+trNav()+ctl+'<h3 class="repttl">'+esc(d.name)+' · '+periodName()+(K?' · '+K+' hours':'')+'</h3>'+tiles+secTbl+ldTbl+trend+'<p class="note">Plan adherence is the share of planned hours that were delivered exactly: hours over or under the plan both count against it. Weeks reported counts finished weeks that have actual hours entered.</p>';
+}
+function vTrackBoard(){
+  var head='<div class="head"><div><h2>Academic tracker</h2><p>Departments ranked on how closely they deliver planned hours, and how reliably they report them. Everyone can see every department.</p></div></div>';
+  var depts=S.depts.filter(function(d){return classesOf(d.id).length});
+  if(!depts.length)return head+trNav()+emptyBox('No department has years and sections yet.');
+  var idx=trIndex(),W=periodWeeks(ui.rpPeriod),K=ui.rpKind,mine=myDepts();
+  var ctl='<div class="panel"><div class="filters">'+periodSel()+'<span class="note" style="align-self:center;max-width:60ch">Score = 70% plan adherence + 30% weeks reported. Only weeks with planned hours count.</span></div></div>';
+  var rows=depts.map(function(d){var cids=classesOf(d.id).map(function(c){return c.id});return {d:d,s:trStats(cids,W,K,idx),n:cids.length}});
+  var ranked=rows.filter(function(r){return r.s.score!==null}).sort(function(a,b){return b.s.score-a.s.score||b.s.adh-a.s.adh});
+  var unranked=rows.filter(function(r){return r.s.score===null});
+  if(!ranked.length)return head+trNav()+ctl+emptyBox('No hours have been planned and reported for '+periodName()+' yet. The board fills in once department heads enter plans and actual hours.');
+  var lead=ranked[0];
+  var banner='<div class="leadband"><div class="trophy" aria-hidden="true">★</div><div><b>'+esc(lead.d.name)+'</b> leads '+(K?K.toLowerCase()+' hours':'the campus')+' for '+periodName()+' with a score of <b>'+pct(lead.s.score)+'</b>.</div></div>';
+  var tbl='<div class="scroll"><table class="tbl trtbl board"><thead><tr><th>Rank</th><th>Department</th><th>Score</th><th>Plan adherence</th><th>Weeks reported</th><th>Net hours against plan</th><th>Sections</th></tr></thead><tbody>'+ranked.map(function(r,i){var own=mine.indexOf(r.d.id)>-1,df=rnd1(r.s.diff);return '<tr'+(own?' class="mine"':'')+'><td><span class="rk r'+(i<3?i+1:0)+'">'+(i+1)+'</span></td><td><b>'+esc(r.d.name)+'</b> <span class="tcode">'+esc(r.d.code)+'</span>'+(own?' <span class="badge b-ok">Your department</span>':'')+'</td><td class="score mono">'+pct(r.s.score)+'</td><td>'+meter(r.s.adh)+' <span class="mono">'+pct(r.s.adh)+'</span></td><td class="mono">'+(r.s.closed?r.s.reported+'/'+r.s.closed+' · '+pct(r.s.rep):'–')+'</td>'+(r.s.pp?(df===0?'<td class="vr-ok">✓ On plan</td>':'<td class="vr-bad">'+sgn(df)+' hrs</td>'):'<td class="vr-wait">–</td>')+'<td class="mono">'+r.n+'</td></tr>'}).join('')+'</tbody></table></div>';
+  var un=unranked.length?'<p class="note">Not ranked yet, nothing planned for this period: '+unranked.map(function(r){return esc(r.d.code)}).join(', ')+'.</p>':'';
+  var all=[];depts.forEach(function(d){classesOf(d.id).forEach(function(c){var s2=trStats([c.id],W,K,idx);if(s2.score!==null)all.push({d:d,c:c,s:s2})})});
+  all.sort(function(a,b){return b.s.score-a.s.score||b.s.adh-a.s.adh});
+  var top=all.slice(0,10),secTbl=top.length?'<section><h3 style="margin-bottom:10px">Top sections</h3><div class="scroll"><table class="tbl trtbl board"><thead><tr><th>Rank</th><th>Section</th><th>Score</th><th>Plan adherence</th><th>Weeks reported</th></tr></thead><tbody>'+top.map(function(r,i){var own=mine.indexOf(r.d.id)>-1;return '<tr'+(own?' class="mine"':'')+'><td><span class="rk r'+(i<3?i+1:0)+'">'+(i+1)+'</span></td><td><b>'+esc(r.d.code)+' · Year '+r.c.year+' '+esc(r.c.section)+'</b></td><td class="score mono">'+pct(r.s.score)+'</td><td>'+meter(r.s.adh)+' <span class="mono">'+pct(r.s.adh)+'</span></td><td class="mono">'+(r.s.closed?r.s.reported+'/'+r.s.closed:'–')+'</td></tr>'}).join('')+'</tbody></table></div></section>':'';
+  return head+trNav()+ctl+banner+tbl+un+secTbl;
+}
+function rpCsv(){
+  var d=deptById(ui.rpDept),idx=trIndex(),W=periodWeeks(ui.rpPeriod),K=ui.rpKind;
+  var q=function(v){v=String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+  var out=[['Department','Year','Section','Planned hrs','Completed hrs','Net vs plan hrs','Adherence %','Weeks reported','Weeks closed'].join(',')];
+  classesOf(d.id).forEach(function(c){var t=trStats([c.id],W,K,idx);out.push([d.code,c.year,c.section,rnd1(t.planned),t.pp?rnd1(t.actual):'',t.pp?rnd1(t.diff):'',t.adh===null?'':Math.round(t.adh*100),t.reported,t.closed].map(q).join(','))});
+  var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([out.join('\n')],{type:'text/csv'}));a.download='academic-progress-'+d.code+'-'+ui.rpPeriod+'.csv';document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},500);
 }
 function kindTag(h){return h.kind==='working'?'<span class="dtag work">Working day</span>':'<span class="dtag">Off day</span>'}
 function trCalendar(cid,canMark,lab){
@@ -1018,6 +1108,9 @@ document.addEventListener('click',function(e){
     case 'lunch':{var ldd=deptById(d.id);if(ldd)open('lunch',{id:ldd.id,lunch:(ldd.lunchSlots||[]).slice()});return}
     case 'addbreak':{var eb=S.slots.filter(function(x){return x.isBreak})[0];open('slot',eb?Object.assign({},eb):{label:'Lunch',start:'13:15',end:'14:00',isBreak:true});return}
     case 'fullday':{var fl=slotOpts();open('fullday',{resId:ui.ttMode==='week'?ui.ttRes:'',days:[ui.ttDay],from:fl.length?fl[0][0]:'',to:fl.length?fl[fl.length-1][0]:'',title:'',faculty:'',classId:ui.lastClass||''});return}
+    case 'trview':ui.trView=d.v;window.scrollTo(0,0);break;
+    case 'rpcsv':rpCsv();return;
+    case 'rpprint':window.print();return;
     case 'trthis':ui.trMonth=today.slice(0,7);ui.trWeek=mondayOf(today);break;
     case 'trwk':ui.trWeek=d.w;break;
     case 'trmonth':{var mm=d.n==='0'?today.slice(0,7):addD(ui.trMonth+'-15',30*(+d.n)).slice(0,7);ui.trMonth=mm;break}
