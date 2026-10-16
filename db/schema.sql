@@ -109,6 +109,34 @@ ALTER TABLE events ADD COLUMN IF NOT EXISTS for_dept_id  text REFERENCES departm
 ALTER TABLE events ADD COLUMN IF NOT EXISTS lent_dept_id text REFERENCES departments(id) ON DELETE SET NULL;
 ALTER TABLE events ADD COLUMN IF NOT EXISTS lent_by      text NOT NULL DEFAULT '';
 
+-- Weekly tracker of academic and training hours
+CREATE TABLE IF NOT EXISTS load_types (
+  id    text PRIMARY KEY,
+  name  text NOT NULL,
+  kind  text NOT NULL CHECK (kind IN ('Academic','Training'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS load_types_name_unique ON load_types (lower(name));
+
+CREATE TABLE IF NOT EXISTS holidays (
+  id        text PRIMARY KEY,
+  date_from date NOT NULL,
+  date_to   date NOT NULL CHECK (date_to >= date_from),
+  title     text NOT NULL,
+  class_id  text REFERENCES classes(id) ON DELETE CASCADE,
+  by_name   text NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS holidays_dates ON holidays (date_from, date_to);
+
+CREATE TABLE IF NOT EXISTS week_plans (
+  id         text PRIMARY KEY,
+  class_id   text NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  week_start date NOT NULL,
+  load_id    text NOT NULL REFERENCES load_types(id) ON DELETE RESTRICT,
+  planned    numeric(6,1) NOT NULL DEFAULT 0 CHECK (planned >= 0),
+  actual     numeric(6,1) CHECK (actual >= 0)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS week_plans_unique ON week_plans (class_id, week_start, load_id);
+
 -- Server-side sign-in sessions: lets us sign out for real, time out idle users and revoke on password/role change
 CREATE TABLE IF NOT EXISTS sessions (
   id         text PRIMARY KEY,
