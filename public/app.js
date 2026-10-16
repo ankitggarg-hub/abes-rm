@@ -131,7 +131,11 @@ function awayAt(resId,date,slotId){
   for(var i=0;i<S.tt.length;i++){var t=S.tt[i];if(t.resId===resId&&t.day===d-1&&t.slotId===slotId){var rl=relFor(t.id,date);if(rl)return {t:t,rel:rl}}}
   return null;
 }
-function canRelease(t){var u=me();if(u.role==='admin'||u.role==='head')return true;if(u.role!=='hod')return false;var c=classById(t.classId);return !!c&&c.deptId===u.deptId}
+function deptIdsOf(u){return u&&u.deptId?[u.deptId].concat(u.moreDeptIds||[]):[]}
+function myDepts(){return deptIdsOf(me())}
+function hodDept(sel){var m=myDepts();return m.indexOf(sel)>-1?sel:(m[0]||null)}
+function deptLabel(ids){return ids.map(function(i){var x=deptById(i);return x?x.code:''}).filter(Boolean).join(' / ')}
+function canRelease(t){var u=me();if(u.role==='admin'||u.role==='head')return true;if(u.role!=='hod')return false;var c=classById(t.classId);return !!c&&myDepts().indexOf(c.deptId)>-1}
 function busyAt(resId,date,slotId){
   var d=dow(date),i;
   if(d>=1&&d<=6){for(i=0;i<S.tt.length;i++){var t=S.tt[i];if(t.resId===resId&&t.day===d-1&&t.slotId===slotId){if(relFor(t.id,date))continue;return {kind:'class',e:t}}}}
@@ -211,7 +215,7 @@ function freedPanel(){
 }
 
 function chTargets(){
-  var u=me(),dept=u.role==='hod'?u.deptId:ui.chDept,out=[];
+  var u=me(),dept=u.role==='hod'?hodDept(ui.chDept):ui.chDept,out=[];
   if(!dept||!ui.chFrom||!ui.chTo||ui.chTo<ui.chFrom)return out;
   var sl=slotList().map(function(x){return x.id}),a=sl.indexOf(ui.chSlotA),b=sl.indexOf(ui.chSlotB);if(a<0)a=0;if(b<0)b=sl.length-1;if(a>b){var tmp=a;a=b;b=tmp}
   var win=sl.slice(a,b+1);
@@ -233,11 +237,11 @@ function vChanges(){
   var cs=slotOpts();
   if(!ui.chSlotA||!slotById(ui.chSlotA)||isBrk(ui.chSlotA))ui.chSlotA=cs.length?cs[0][0]:sl[0].id;
   if(!ui.chSlotB||!slotById(ui.chSlotB)||isBrk(ui.chSlotB))ui.chSlotB=cs.length?cs[cs.length-1][0]:sl[sl.length-1].id;
-  var dept=u.role==='hod'?u.deptId:ui.chDept;
+  var dept=u.role==='hod'?hodDept(ui.chDept):ui.chDept;
   if(ui.chClass&&(!classById(ui.chClass)||classById(ui.chClass).deptId!==dept))ui.chClass='';
   var cls=classesOf(dept),tg=chTargets();
   var f='<form class="panel" data-chform="1" novalidate><h3>Release scheduled classes</h3><p class="note" style="margin:0 0 12px">Use this when a class is somewhere else on a particular day: an industrial visit, a placement drive, a seminar, an exam. Their regular room shows as free on those dates, so anyone who is allowed to book can use it. The weekly timetable itself does not change.</p><div class="filters">'+
-    (u.role==='hod'?'':'<label>Department<select data-set="chDept">'+S.depts.map(function(d){return '<option value="'+d.id+'"'+(d.id===ui.chDept?' selected':'')+'>'+esc(d.name)+'</option>'}).join('')+'</select></label>')+
+    ((u.role==='hod'&&myDepts().length<2)?'':'<label>Department<select data-set="chDept">'+S.depts.filter(function(d){return u.role!=='hod'||myDepts().indexOf(d.id)>-1}).map(function(d){return '<option value="'+d.id+'"'+(d.id===dept?' selected':'')+'>'+esc(d.name)+'</option>'}).join('')+'</select></label>')+
     '<label>Year and section<select name="cls" data-set="chClass"><option value="">All sections of the department</option>'+cls.map(function(c){return '<option value="'+c.id+'"'+(c.id===ui.chClass?' selected':'')+'>'+esc(classFull(c))+'</option>'}).join('')+'</select></label>'+
     '<label>From date<input type="date" name="from" value="'+ui.chFrom+'" data-set="chFrom" required></label>'+
     '<label>To date<input type="date" name="to" value="'+ui.chTo+'" data-set="chTo" required></label>'+
@@ -292,18 +296,18 @@ function vAvail(){
 }
 
 function evRow(e){
-  var r=resById(e.resId),k='ev:'+e.id,mine=e.by===me().name,lender=e.lentDeptId&&me().role==='hod'&&e.lentDeptId===me().deptId;
+  var r=resById(e.resId),k='ev:'+e.id,mine=e.by===me().name,lender=e.lentDeptId&&me().role==='hod'&&myDepts().indexOf(e.lentDeptId)>-1;
   var acts='';
   if(e.status==='pending'&&canApprove())acts+='<button class="btn sm primary" data-act="approve" data-id="'+e.id+'">Approve</button> <button class="btn sm" data-act="reject" data-id="'+e.id+'">Decline</button> ';
   if(canApprove()||mine||lender)acts+='<button class="btn sm danger" data-act="del" data-k="'+k+'">'+(ui.confirm===k?'Confirm cancel':'Cancel event')+'</button>';
   return '<tr><td class="mono" style="white-space:nowrap">'+fmtDate(e.date)+'</td><td class="mono" style="white-space:nowrap">'+timeRange(e.slotIds)+'</td><td>'+(r?tcode(r.type)+esc(r.name):'Removed venue')+'</td><td><b>'+esc(e.title)+'</b>'+(e.notes?'<br><span class="note">'+esc(e.notes)+'</span>':'')+'</td><td>'+esc(e.by)+(e.lentDeptId?'<br><span class="note">Lent by '+(deptById(e.lentDeptId)?esc(deptById(e.lentDeptId).code):'')+(e.lentBy?' · '+esc(e.lentBy):'')+'</span>':'')+'<br><span class="note">'+(e.attendees||'–')+' expected</span></td><td>'+statusBadge(e.status)+'</td><td class="act">'+acts+'</td></tr>';
 }
 /* ---------- lending a department's venue ---------- */
-function hodOf(deptId){return S.users.filter(function(u){return u.role==='hod'&&u.deptId===deptId})[0]||null}
+function hodOf(deptId){return S.users.filter(function(u){return u.role==='hod'&&deptIdsOf(u).indexOf(deptId)>-1})[0]||null}
 function lendToHTML(cur){
-  var u=me(),o='<option value="">Choose who it is for…</option>',ds=S.depts.filter(function(d){return d.id!==u.deptId}),hs=S.users.filter(function(x){return x.role==='hod'&&x.deptId&&x.deptId!==u.deptId});
+  var u=me(),o='<option value="">Choose who it is for…</option>',ds=S.depts.filter(function(d){return myDepts().indexOf(d.id)<0}),hs=S.users.filter(function(x){return x.role==='hod'&&x.id!==u.id&&x.deptId&&myDepts().indexOf(x.deptId)<0});
   o+='<optgroup label="Department">'+ds.map(function(d){var h=hodOf(d.id);return '<option value="d:'+d.id+'"'+(cur==='d:'+d.id?' selected':'')+'>'+esc(d.code+' – '+d.name+(h?' (HoD: '+h.name+')':''))+'</option>'}).join('')+'</optgroup>';
-  o+='<optgroup label="Head of department">'+hs.map(function(h){var d=deptById(h.deptId);return '<option value="h:'+h.id+'"'+(cur==='h:'+h.id?' selected':'')+'>'+esc(h.name+(d?' · '+d.code:''))+'</option>'}).join('')+'</optgroup>';
+  o+='<optgroup label="Head of department">'+hs.map(function(h){return '<option value="h:'+h.id+'"'+(cur==='h:'+h.id?' selected':'')+'>'+esc(h.name+' · '+deptLabel(deptIdsOf(h)))+'</option>'}).join('')+'</optgroup>';
   o+='<optgroup label="Someone else"><option value="x"'+(cur==='x'?' selected':'')+'>Faculty, guest or organisation (type the name below)</option></optgroup>';
   return '<select id="f-toWho" name="toWho">'+o+'</select>';
 }
@@ -311,11 +315,11 @@ function openLend(resId,from,to,date){
   open('lend',{resId:resId,date:date||ui.lnDate,from:from||ui.lnFrom,to:to||ui.lnTo,toWho:'',forName:'',title:'',attendees:'',notes:''});
 }
 function vLend(){
-  var u=me(),d=deptById(u.deptId),sl=slotList();
+  var u=me(),md=myDepts(),d=deptById(u.deptId),sl=slotList(),lbl=deptLabel(md);
   var head='<div class="head"><div><h2>Lend a venue</h2><p>When one of your department’s venues is free on a date and time, you can book it for another department, a head of department or an outside guest. It is confirmed straight away and the slot is blocked for everyone else.</p></div></div>';
   if(!d)return head+emptyBox('No department is linked to this account. Ask the administrator to set it in Masters → Users.');
-  var own=S.resources.filter(function(r){return r.deptId===d.id});
-  if(!own.length)return head+emptyBox(esc(d.code)+' has no venues yet. The administrator can allocate venues in Masters → Allocation.');
+  var own=S.resources.filter(function(r){return md.indexOf(r.deptId)>-1});
+  if(!own.length)return head+emptyBox(esc(lbl)+' has no venues yet. The administrator can allocate venues in Masters → Allocation.');
   if(!sl.length)return head+emptyBox('No time slots are defined yet.');
   var date=ui.lnDate,win=slotRange(ui.lnFrom,ui.lnTo).map(function(s){return s.id});
   var rs=own.filter(function(r){return !ui.lnType||r.type===ui.lnType}).sort(function(a,b){return TYPES.indexOf(a.type)-TYPES.indexOf(b.type)||a.capacity-b.capacity});
@@ -332,17 +336,17 @@ function vLend(){
   if(date<today)cards=emptyBox('That date has passed. Choose today or a later date.');
   else if(!win.length)cards=emptyBox('Choose a time that is not a break.');
   else cards=free.length?'<div class="cards">'+free.map(function(r){
-    return '<div class="card vfree"><h4>'+tcode(r.type)+esc(r.name)+'</h4><div class="meta">'+esc(r.type)+' · '+esc(locStr(r))+'</div><div><b class="mono">'+r.capacity+'</b> seats</div><div class="meta">'+esc(r.equipment||'No equipment listed')+'</div>'+awayNote(r.id,date,win)+'<div><button class="btn primary sm" data-act="lend" data-res="'+r.id+'">Lend this venue</button></div></div>';
-  }).join('')+'</div>':emptyBox('None of '+esc(d.code)+'’s venues is free for the whole of that time. Try another time or date.');
-  var out=S.events.filter(function(e){return e.lentDeptId===d.id&&e.date>=today}).sort(function(a,b){return a.date.localeCompare(b.date)});
+    return '<div class="card vfree"><h4>'+tcode(r.type)+esc(r.name)+'</h4><div class="meta">'+esc(r.type)+' · '+esc(locStr(r))+'</div><div><b class="mono">'+r.capacity+'</b> seats'+(md.length>1?' · '+dtag(r.deptId):'')+'</div><div class="meta">'+esc(r.equipment||'No equipment listed')+'</div>'+awayNote(r.id,date,win)+'<div><button class="btn primary sm" data-act="lend" data-res="'+r.id+'">Lend this venue</button></div></div>';
+  }).join('')+'</div>':emptyBox('None of '+esc(lbl)+'’s venues is free for the whole of that time. Try another time or date.');
+  var out=S.events.filter(function(e){return md.indexOf(e.lentDeptId)>-1&&e.date>=today}).sort(function(a,b){return a.date.localeCompare(b.date)});
   var th='<thead><tr><th>Date</th><th>Time</th><th>Venue</th><th>Event</th><th>Lent to</th><th>Status</th><th></th></tr></thead>';
-  var list='<section><h3 style="margin-bottom:10px">Lent out by '+esc(d.code)+'</h3>'+(out.length?'<div class="scroll"><table class="tbl">'+th+'<tbody>'+out.map(evRow).join('')+'</tbody></table></div>':emptyBox('Nothing lent out yet.'))+'</section>';
+  var list='<section><h3 style="margin-bottom:10px">Lent out by '+esc(lbl)+'</h3>'+(out.length?'<div class="scroll"><table class="tbl">'+th+'<tbody>'+out.map(evRow).join('')+'</tbody></table></div>':emptyBox('Nothing lent out yet.'))+'</section>';
   var sub=(date>=today&&win.length)?'<h3 style="margin-bottom:10px">'+free.length+' of '+rs.length+' venue'+(rs.length===1?'':'s')+' free from '+first.start+' to '+last.end+' on '+fmtDate(date)+'</h3>':'';
   return head+filters+'<section>'+sub+cards+'</section>'+list;
 }
 function lentToPanel(){
   var u=me();if(u.role!=='hod'||!u.deptId)return '';
-  var up=S.events.filter(function(e){return e.forDeptId===u.deptId&&e.date>=today}).sort(function(a,b){return a.date.localeCompare(b.date)}).slice(0,8);
+  var up=S.events.filter(function(e){return myDepts().indexOf(e.forDeptId)>-1&&e.date>=today}).sort(function(a,b){return a.date.localeCompare(b.date)}).slice(0,8);
   return '<section class="panel"><h3>Venues lent to your department</h3>'+(up.length?'<ul class="list">'+up.map(function(e){var r=resById(e.resId),ld=deptById(e.lentDeptId);return '<li><span><b>'+esc(e.title)+'</b><br><span class="note">'+esc(r?r.name:'Removed venue')+' · '+fmtDate(e.date)+' · <span class="mono">'+timeRange(e.slotIds)+'</span>'+(ld?' · lent by '+esc(ld.code):'')+'</span></span></li>'}).join('')+'</ul>':'<p class="note" style="margin:0">No other department has lent you a venue yet.</p>')+'</section>';
 }
 
@@ -357,10 +361,10 @@ function vEvents(){
 
 function vTimetable(){
   var u=me(),sl=slotList();
-  var deptId=u.role==='admin'?ui.ttDept:u.deptId;
+  var deptId=u.role==='admin'?ui.ttDept:hodDept(ui.ttDept);
   var d=deptById(deptId);
   var head='<div class="head"><div><h2>'+(u.role==='admin'?'Department timetables':'Timetable · '+(d?esc(d.name):''))+'</h2><p>Click a cell to add or edit a class. The system blocks a second class for the same venue, faculty member or section in one period.</p></div>'+
-    (u.role==='admin'?'<label class="fld" style="min-width:240px">Department<select id="tt-dept" data-set="ttDept">'+deptOpts().map(function(o){return '<option value="'+o[0]+'"'+(o[0]===ui.ttDept?' selected':'')+'>'+esc(o[1])+'</option>'}).join('')+'</select></label>':'')+'</div>';
+    ((u.role==='admin'||myDepts().length>1)?'<label class="fld" style="min-width:240px">Department<select id="tt-dept" data-set="ttDept">'+deptOpts().filter(function(o){return u.role==='admin'||myDepts().indexOf(o[0])>-1}).map(function(o){return '<option value="'+o[0]+'"'+(o[0]===deptId?' selected':'')+'>'+esc(o[1])+'</option>'}).join('')+'</select></label>':'')+'</div>';
   if(!d)return head+emptyBox('No department is linked to this account. Ask the administrator to set it in Masters → Users.');
   var rs=S.resources.filter(function(r){return r.deptId===d.id});
   if(!rs.length)return head+emptyBox(esc(d.code)+' has no venues yet. The administrator can allocate lecture theatres and labs in Masters → Allocation.');
@@ -417,7 +421,7 @@ var noMatch=function(total,empty){return total?emptyBox('Nothing matches these f
 function mDepts(){
   var L=S.depts.filter(function(d){return hit(mfv('depts','q'),[d.name,d.code])});
   return mfBar('depts',[mfTxt('depts','Search','Name or code')],L.length,S.depts.length)+'<div class="scroll"><table class="tbl"><thead><tr><th>Code</th><th>Department</th><th>Venues</th><th>Users</th><th>Lunch break</th><th></th></tr></thead><tbody>'+
-  L.map(function(d){var k='dept:'+d.id;return '<tr><td>'+dtag(d.id)+'</td><td>'+esc(d.name)+'</td><td class="mono">'+S.resources.filter(function(r){return r.deptId===d.id}).length+'</td><td class="mono">'+S.users.filter(function(x){return x.deptId===d.id}).length+'</td><td class="note">'+(lunchText(d)?esc(lunchText(d)):'<span class="muted">Not set</span>')+' <button class="link" data-act="lunch" data-id="'+d.id+'">Set</button></td><td class="act"><button class="btn sm" data-act="edit" data-t="dept" data-id="'+d.id+'">Edit</button><button class="btn sm danger" data-act="del" data-k="'+k+'">'+(ui.confirm===k?'Confirm delete':'Delete')+'</button></td></tr>'}).join('')+'</tbody></table></div>'+(L.length?'':noMatch(S.depts.length,'No departments yet.'));
+  L.map(function(d){var k='dept:'+d.id;return '<tr><td>'+dtag(d.id)+'</td><td>'+esc(d.name)+'</td><td class="mono">'+S.resources.filter(function(r){return r.deptId===d.id}).length+'</td><td class="mono">'+S.users.filter(function(x){return deptIdsOf(x).indexOf(d.id)>-1}).length+'</td><td class="note">'+(lunchText(d)?esc(lunchText(d)):'<span class="muted">Not set</span>')+' <button class="link" data-act="lunch" data-id="'+d.id+'">Set</button></td><td class="act"><button class="btn sm" data-act="edit" data-t="dept" data-id="'+d.id+'">Edit</button><button class="btn sm danger" data-act="del" data-k="'+k+'">'+(ui.confirm===k?'Confirm delete':'Delete')+'</button></td></tr>'}).join('')+'</tbody></table></div>'+(L.length?'':noMatch(S.depts.length,'No departments yet.'));
 }
 function mBuildings(){
   var L=S.buildings.filter(function(b){return hit(mfv('bld','q'),[b.name])});
@@ -469,9 +473,9 @@ function mRes(){
   L.map(function(r){var k='res:'+r.id;return '<tr><td><b>'+esc(r.name)+'</b></td><td>'+tcode(r.type)+esc(r.type)+'</td><td>'+esc((bldById(r.buildingId)||{}).name||'–')+'</td><td>'+esc((floorById(r.floorId)||{}).name||'–')+'</td><td class="mono">'+r.capacity+'</td><td>'+esc(r.equipment)+'</td><td>'+dtag(r.deptId)+'</td><td class="act"><button class="btn sm" data-act="edit" data-t="resource" data-id="'+r.id+'">Edit</button><button class="btn sm danger" data-act="del" data-k="'+k+'">'+(ui.confirm===k?'Confirm delete':'Delete')+'</button></td></tr>'}).join('')+'</tbody></table></div>'+(L.length?'':noMatch(S.resources.length,'No venues yet.'));
 }
 function mUsers(){
-  var L=S.users.filter(function(u){return hit(mfv('users','q'),[u.name,u.email||''])&&(!mfv('users','role')||u.role===mfv('users','role'))&&(!mfv('users','dept')||(mfv('users','dept')==='none'?!u.deptId:u.deptId===mfv('users','dept')))});
+  var L=S.users.filter(function(u){return hit(mfv('users','q'),[u.name,u.email||''])&&(!mfv('users','role')||u.role===mfv('users','role'))&&(!mfv('users','dept')||(mfv('users','dept')==='none'?!u.deptId:deptIdsOf(u).indexOf(mfv('users','dept'))>-1))});
   return mfBar('users',[mfTxt('users','Search','Name or email'),mfSel('users','role','Role',Object.keys(ROLE).map(function(k){return [k,ROLE[k]]})),mfSel('users','dept','Department',[['none','No department']].concat(S.depts.map(function(d){return [d.id,d.code+' – '+d.name]})))],L.length,S.users.length)+'<div class="scroll"><table class="tbl"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Department</th><th></th></tr></thead><tbody>'+
-  L.map(function(u){var k='user:'+u.id;return '<tr><td><b>'+esc(u.name)+'</b></td><td>'+esc(u.email)+'</td><td>'+ROLE[u.role]+'</td><td>'+(u.deptId?dtag(u.deptId):'<span class="muted">–</span>')+'</td><td class="act"><button class="btn sm" data-act="edit" data-t="user" data-id="'+u.id+'">Edit</button><button class="btn sm danger" data-act="del" data-k="'+k+'">'+(ui.confirm===k?'Confirm delete':'Delete')+'</button></td></tr>'}).join('')+'</tbody></table></div>'+(L.length?'':noMatch(S.users.length,'No users yet.'));
+  L.map(function(u){var k='user:'+u.id;return '<tr><td><b>'+esc(u.name)+'</b></td><td>'+esc(u.email)+'</td><td>'+ROLE[u.role]+'</td><td>'+(u.deptId?deptIdsOf(u).map(function(i){return dtag(i)}).join(' '):'<span class="muted">–</span>')+'</td><td class="act"><button class="btn sm" data-act="edit" data-t="user" data-id="'+u.id+'">Edit</button><button class="btn sm danger" data-act="del" data-k="'+k+'">'+(ui.confirm===k?'Confirm delete':'Delete')+'</button></td></tr>'}).join('')+'</tbody></table></div>'+(L.length?'':noMatch(S.users.length,'No users yet.'));
 }
 function mAlloc(){
   var chips=S.depts.map(function(d){return '<span>'+dtag(d.id)+' <b class="mono">'+S.resources.filter(function(r){return r.deptId===d.id}).length+'</b></span>'}).join(' ')+' <span><span class="dtag central">Central pool</span> <b class="mono">'+S.resources.filter(function(r){return !r.deptId}).length+'</b></span>';
@@ -525,7 +529,7 @@ function modalHTML(){
     case 'resource':title=(v.id?'Edit':'Add')+' venue';
       body=fld('Name',tin('name',v.name,'required'))+'<div class="frow">'+fld('Type',sel('type',TYPES.map(function(t){return [t,t]}),v.type||TYPES[0]))+fld('Seats',tin('capacity',v.capacity||'','type="number" min="1" required'))+'</div>'+'<div class="frow">'+fld('Building',sel('buildingId',S.buildings.map(function(b){return [b.id,b.name]}),v.buildingId||(S.buildings[0]||{}).id))+fld('Floor',sel('floorId',floorList().map(function(f){return [f.id,f.name]}),v.floorId||(floorList()[0]||{}).id))+'</div>'+fld('Equipment',tin('equipment',v.equipment))+fld('Allocated to',sel('deptId',deptOpts('Central pool (no department)'),v.deptId||''));break;
     case 'user':title=(v.id?'Edit':'Add')+' user';
-      body=fld('Full name',tin('name',v.name,'required'))+fld('Email (used to sign in)',tin('email',v.email,'type="email" required autocomplete="off"'))+fld(v.id?'New password (leave empty to keep the current one)':'Password',tin('password','','type="password" minlength="8" autocomplete="new-password"'+(v.id?'':' required')))+'<div class="frow">'+fld('Role',sel('role',Object.keys(ROLE).map(function(k){return [k,ROLE[k]]}),v.role||'stakeholder'))+fld('Department (department heads)',sel('deptId',deptOpts('None'),v.deptId||''))+'</div>';break;
+      body=fld('Full name',tin('name',v.name,'required'))+fld('Email (used to sign in)',tin('email',v.email,'type="email" required autocomplete="off"'))+fld(v.id?'New password (leave empty to keep the current one)':'Password',tin('password','','type="password" minlength="8" autocomplete="new-password"'+(v.id?'':' required')))+'<div class="frow">'+fld('Role',sel('role',Object.keys(ROLE).map(function(k){return [k,ROLE[k]]}),v.role||'stakeholder'))+fld('Main department (department heads)',sel('deptId',deptOpts('None'),v.deptId||''))+'</div>'+'<fieldset class="move"><legend>Also manages (department heads only)</legend><div class="chips">'+S.depts.map(function(dx){return '<label class="chk"><input type="checkbox" name="moreDeptIds" value="'+dx.id+'"'+((v.moreDeptIds||[]).indexOf(dx.id)>-1?' checked':'')+'> '+esc(dx.code)+'</label>'}).join('')+'</div><p class="note" style="margin:6px 0 0">A head can build timetables, set lunch breaks, mark classes away and lend venues for every department ticked here, as well as the main one.</p></fieldset>';break;
     case 'tt':{var r=resById(v.resId),s=slotById(v.slotId);title=(v.id?'Edit':'Add')+' class';
       extra='<p class="ctx"><b>'+esc(r?r.name:'')+'</b> · '+DAYF[v.day]+' · '+(s?esc(s.label)+' '+s.start+'–'+s.end:'')+'</p>';
       body=fld('Subject or session',tin('title',v.title,'required autocomplete="off"'))+'<div class="frow">'+fld('Faculty (optional)',tin('faculty',v.faculty,'autocomplete="off"'))+fld('Year and section',(function(){var dc=r?classesOf(r.deptId):[];return dc.length?sel('classId',[['','Choose year and section']].concat(dc.map(function(c){return [c.id,classFull(c)+(c.strength?' ('+c.strength+' students)':'')]})),v.classId||(!v.id&&dc.some(function(c){return c.id===ui.lastClass})?ui.lastClass:'')):'<span class="err">No years or sections exist for this department. Add them in Masters → Years & sections.</span>'})())+'</div>'+(v.id?moveSection(v)+(v.classId&&me().role!=='stakeholder'?'<p class="note" style="margin:0">Class away on a particular day? <button type="button" class="btn sm" data-act="gochange" data-cls="'+esc(v.classId)+'">Release this class for a date</button></p>':''):'');break}
@@ -534,7 +538,7 @@ function modalHTML(){
       var lv=[].concat(v.lunch||[]).map(String);
       body='<fieldset class="days"><legend>Lunch periods</legend>'+slotOpts().map(function(o){return '<label class="chk"><input type="checkbox" name="lunch" value="'+o[0]+'"'+(lv.indexOf(String(o[0]))>-1?' checked':'')+'> '+esc(o[1])+'</label>'}).join('')+'</fieldset>';break}
     case 'fullday':{title='Allot a full day';
-      var fdD=deptById(me().role==='admin'?ui.ttDept:me().deptId),fdRs=S.resources.filter(function(x){return fdD&&x.deptId===fdD.id}),fdCl=fdD?classesOf(fdD.id):[];
+      var fdD=deptById(me().role==='admin'?ui.ttDept:hodDept(ui.ttDept)),fdRs=S.resources.filter(function(x){return fdD&&x.deptId===fdD.id}),fdCl=fdD?classesOf(fdD.id):[];
       var fdDays=[].concat(v.days||[]).map(String);
       extra='<p class="ctx">One subject and one section for several periods in a row, on one or more days. Periods that are already taken, and breaks, are skipped.</p>';
       body=fld('Venue',sel('resId',fdRs.map(function(x){return [x.id,x.name+' ('+x.capacity+' seats)']}),v.resId))+
@@ -542,7 +546,7 @@ function modalHTML(){
         '<div class="frow">'+fld('From period',sel('from',slotOpts(),v.from))+fld('To period',sel('to',slotOpts(),v.to))+'</div>'+
         fld('Year and section',sel('classId',[['','Choose year and section']].concat(fdCl.map(function(c){return [c.id,classFull(c)]})),v.classId||''))+
         fld('Subject or session',tin('title',v.title,'required autocomplete="off"'))+fld('Faculty (optional)',tin('faculty',v.faculty,'autocomplete="off"'));break}
-    case 'lend':{var du=deptById(me().deptId),ownAll=S.resources.filter(function(r){return r.deptId===me().deptId}),lwin=slotRange(v.from,v.to),
+    case 'lend':{var du=deptById(me().deptId),ownAll=S.resources.filter(function(r){return myDepts().indexOf(r.deptId)>-1}),lwin=slotRange(v.from,v.to),
         ownR=(v.date&&v.date>=today&&lwin.length)?ownAll.filter(function(r){return lwin.every(function(sx){return !busyAt(r.id,v.date,sx.id)})}):[],
         r3;
       if(!ownR.some(function(r){return r.id===v.resId}))v.resId=ownR.length?ownR[0].id:'';
@@ -550,7 +554,7 @@ function modalHTML(){
       extra='<p class="ctx">Booked for someone else from '+(du?esc(du.name):'your department')+'’s venues. It is confirmed immediately.'+(r3?' '+esc(r3.type)+' · '+r3.capacity+' seats · '+esc(locStr(r3)):'')+'</p>';
       var lsel=function(n,val){return sel(n,slotOpts(),val).replace('<select ','<select data-lendref="1" ')};
       body='<div class="frow">'+fld('Date',tin('date',v.date,'type="date" required data-lendref="1"'))+fld('Expected attendees',tin('attendees',v.attendees||'','type="number" min="1"'))+'</div><div class="frow">'+fld('From',lsel('from',v.from))+fld('To',lsel('to',v.to))+'</div>'+
-        fld('Venue (only venues free at that time)',ownR.length?sel('resId',ownR.map(function(r){return [r.id,r.name+' ('+r.capacity+' seats)']}),v.resId):'<p class="err" style="margin:0">None of '+(du?esc(du.code):'your')+' venues is free for that whole time. Change the date or time.</p>')+
+        fld('Venue (only venues free at that time)',ownR.length?sel('resId',ownR.map(function(r){return [r.id,r.name+' ('+r.capacity+' seats)']}),v.resId):'<p class="err" style="margin:0">None of '+(myDepts().length?esc(deptLabel(myDepts())):'your')+' venues is free for that whole time. Change the date or time.</p>')+
         fld('Lend to',lendToHTML(v.toWho))+fld('Name, only if “Someone else”',tin('forName',v.forName,'autocomplete="off"'))+fld('Purpose',tin('title',v.title,'required autocomplete="off" placeholder="Guest lecture, exam, workshop"'))+fld('Notes',tin('notes',v.notes,'placeholder="Equipment, seating, contact person"'));break}
     case 'book':{var r2=resById(v.resId);title='Book '+(r2?r2.name:'venue');
       extra='<p class="ctx">'+(r2?esc(r2.type)+' · '+r2.capacity+' seats · '+esc(locStr(r2)):'')+'</p>';
@@ -660,6 +664,7 @@ function submitForm(type,d){
     return done('Venue saved.');
   }
   if(type==='user'){
+    d.moreDeptIds=[].concat(d.moreDeptIds||[]).filter(Boolean);v.moreDeptIds=d.moreDeptIds;
     v.name=(v.name||'').trim();v.email=(v.email||'').trim().toLowerCase();var pw=d.password||'';
     delete d.password;delete v.password;
     if(!v.name)return fail('Enter the user’s name.',d);
@@ -669,8 +674,8 @@ function submitForm(type,d){
     if(pw&&(pw.length<8||pw.length>72))return fail('A password must be 8 to 72 characters.',d);
     if(v.role==='hod'&&!v.deptId)return fail('A department head needs a department.',d);
     if(v.id&&base.role==='admin'&&v.role!=='admin'&&S.users.filter(function(x){return x.role==='admin'}).length<2)return fail('Keep at least one administrator.',d);
-    var dp=v.role==='hod'?(v.deptId||null):null;
-    if(v.id){o=S.users.filter(function(x){return x.id===v.id})[0];o.name=v.name;o.email=v.email;o.role=v.role;o.deptId=dp;if(pw)o.password=pw}else{var nu={id:uid('u'),name:v.name,email:v.email,role:v.role,deptId:dp,password:pw};S.users.push(nu)}
+    var dp=v.role==='hod'?(v.deptId||null):null,more=v.role==='hod'?v.moreDeptIds.filter(function(x){return x!==dp&&deptById(x)}):[];
+    if(v.id){o=S.users.filter(function(x){return x.id===v.id})[0];o.name=v.name;o.email=v.email;o.role=v.role;o.deptId=dp;o.moreDeptIds=more;if(pw)o.password=pw}else{var nu={id:uid('u'),name:v.name,email:v.email,role:v.role,deptId:dp,moreDeptIds:more,password:pw};S.users.push(nu)}
     return done('User saved.');
   }
   if(type==='lunch'){
@@ -720,20 +725,20 @@ function submitForm(type,d){
   if(type==='lend'){
     var u0=me(),lr=resById(v.resId);
     v.title=(v.title||'').trim();
-    if(!lr||lr.deptId!==u0.deptId)return fail('No venue of yours is free at that time. Change the date or time.',d);
+    if(!lr||myDepts().indexOf(lr.deptId)<0)return fail('No venue of yours is free at that time. Change the date or time.',d);
     if(!v.title||!v.date)return fail('Enter the purpose and the date.',d);
     if(v.date<today)return fail('Choose today or a later date.',d);
     if(!v.toWho)return fail('Choose who the venue is lent to.',d);
     var who=String(v.toWho),byTxt='',fdept=null;
-    if(who.indexOf('d:')===0){var dd=deptById(who.slice(2));if(!dd||dd.id===u0.deptId)return fail('Choose a different department.',d);byTxt='Department of '+dd.name+' ('+dd.code+')';fdept=dd.id}
-    else if(who.indexOf('h:')===0){var hh=S.users.filter(function(x){return x.id===who.slice(2)})[0];if(!hh||!hh.deptId||hh.deptId===u0.deptId)return fail('Choose another department head.',d);var hd=deptById(hh.deptId);byTxt=hh.name+(hd?' (HoD, '+hd.code+')':'');fdept=hh.deptId}
+    if(who.indexOf('d:')===0){var dd=deptById(who.slice(2));if(!dd||myDepts().indexOf(dd.id)>-1)return fail('Choose a different department.',d);byTxt='Department of '+dd.name+' ('+dd.code+')';fdept=dd.id}
+    else if(who.indexOf('h:')===0){var hh=S.users.filter(function(x){return x.id===who.slice(2)})[0];if(!hh||!hh.deptId||myDepts().indexOf(hh.deptId)>-1)return fail('Choose another department head.',d);var hd=deptById(hh.deptId);byTxt=hh.name+(hd?' (HoD, '+hd.code+')':'');fdept=hh.deptId}
     else{byTxt=(v.forName||'').trim();if(!byTxt)return fail('Type the name of the person or organisation.',d)}
     var sp=slotRange(v.from,v.to),lat=parseInt(v.attendees,10)||0;
     if(!sp.length)return fail('Choose a time that is not a break.',d);
     if(lat>lr.capacity)return fail(lr.name+' seats '+lr.capacity+'. Reduce attendees or pick a larger venue.',d);
     for(i=0;i<sp.length;i++){var bb=busyAt(lr.id,v.date,sp[i].id);
       if(bb)return fail(lr.name+' is not free in '+sp[i].label+' on '+fmtDate(v.date)+' ('+(bb.kind==='class'?'class: '+bb.e.title:'event: '+bb.ev.title)+').',d)}
-    S.events.push({id:uid('e'),resId:lr.id,date:v.date,slotIds:sp.map(function(s){return s.id}),title:v.title,by:byTxt,attendees:lat,notes:(v.notes||'').trim(),status:'confirmed',forDeptId:fdept,lentDeptId:u0.deptId,lentBy:u0.name});
+    S.events.push({id:uid('e'),resId:lr.id,date:v.date,slotIds:sp.map(function(s){return s.id}),title:v.title,by:byTxt,attendees:lat,notes:(v.notes||'').trim(),status:'confirmed',forDeptId:fdept,lentDeptId:lr.deptId,lentBy:u0.name});
     return done('Lent '+lr.name+' to '+byTxt+'.');
   }
   if(type==='book'){
@@ -753,7 +758,7 @@ function submitForm(type,d){
 function tryDelete(k){
   var p=k.split(':'),kind=p[0],id=p[1],n;
   if(kind==='dept'){
-    n=S.resources.filter(function(r){return r.deptId===id}).length;var m=S.users.filter(function(x){return x.deptId===id}).length,q=S.classes.filter(function(x){return x.deptId===id}).length;
+    n=S.resources.filter(function(r){return r.deptId===id}).length;var m=S.users.filter(function(x){return deptIdsOf(x).indexOf(id)>-1}).length,q=S.classes.filter(function(x){return x.deptId===id}).length;
     if(n||m||q)return toast('Move or delete its '+n+' venue(s), '+m+' user(s) and '+q+' year/section(s) first.',true);
     S.depts=S.depts.filter(function(x){return x.id!==id});
   } else if(kind==='cls'){
