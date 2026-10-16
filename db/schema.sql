@@ -123,8 +123,11 @@ CREATE TABLE IF NOT EXISTS holidays (
   date_to   date NOT NULL CHECK (date_to >= date_from),
   title     text NOT NULL,
   class_id  text REFERENCES classes(id) ON DELETE CASCADE,
-  by_name   text NOT NULL DEFAULT ''
+  by_name   text NOT NULL DEFAULT '',
+  kind      text NOT NULL DEFAULT 'off' CHECK (kind IN ('off','working'))
 );
+-- for databases created before working-day conversions existed
+ALTER TABLE holidays ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'off' CHECK (kind IN ('off','working'));
 CREATE INDEX IF NOT EXISTS holidays_dates ON holidays (date_from, date_to);
 
 CREATE TABLE IF NOT EXISTS week_plans (
