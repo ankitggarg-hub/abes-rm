@@ -210,7 +210,7 @@ fieldset.days legend{font-size:13px;color:var(--muted);padding:0 4px}
 .card.vfree{background:var(--free-soft);border-color:var(--free-line);border-left:4px solid var(--free)}
 
 /* Academic tracker */
-.dstrip{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.dstrip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
 .dcell{border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:12px;display:grid;gap:2px;min-width:0}
 .dcell span{color:var(--muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dcell.work{background:var(--free-soft);border-color:var(--free-line)}
@@ -226,3 +226,20 @@ fieldset.days legend{font-size:13px;color:var(--muted);padding:0 4px}
 .trtbl td.vr-wait{color:var(--muted)}
 input.hrs{width:84px;text-align:right;font-family:var(--f-mono)}
 .rowhead{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px}
+/* off-day calendar */
+.calbox{margin:10px 0;border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--panel,transparent)}
+.calgrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin-top:8px}
+.calh{font-size:11px;color:var(--muted);text-align:center;font-weight:600}
+.cal{border:1px solid var(--line);border-radius:6px;min-height:54px;padding:4px 6px;font:inherit;font-size:12px;text-align:left;display:grid;align-content:start;gap:1px;background:var(--free-soft);color:inherit;min-width:0}
+button.cal{cursor:pointer}button.cal:hover{outline:2px solid var(--accent,#2563eb)}
+.cal span{font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cal.work{border-color:var(--free-line)}
+.cal.off{background:#fde4e4;border-color:#f0b4b4}.cal.off.own{background:#fbd0d0}
+.cal.weekend{background:repeating-linear-gradient(135deg,var(--line) 0 6px,transparent 6px 12px)}
+.cal.wk{background:#d6ecff;border-color:#8cc0f0}
+.cal.out{opacity:.35}.cal.today{box-shadow:inset 0 0 0 2px var(--accent,#2563eb)}
+@media (prefers-color-scheme:dark){.cal.off{background:#4a2323;border-color:#7a3a3a}.cal.off.own{background:#5c2a2a}.cal.wk{background:#1f3a55;border-color:#3a6a9a}}
+.lg{display:inline-block;width:11px;height:11px;border-radius:3px;border:1px solid var(--line);vertical-align:-1px;margin:0 4px 0 10px}
+.lg.work{background:var(--free-soft)}.lg.off{background:#fde4e4}.lg.weekend{background:var(--line)}.lg.wk{background:#d6ecff}
+.dtag.work{background:#d6ecff;color:#0b4a82}
+@media (max-width:760px){.dstrip{grid-template-columns:repeat(2,minmax(0,1fr))}.cal{min-height:44px}.cal span{display:none}}
