@@ -59,6 +59,9 @@ CREATE TABLE IF NOT EXISTS users (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique ON users (lower(email)) WHERE email <> '';
 
+-- A department head can manage more than one department (the main one stays in dept_id)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS more_dept_ids jsonb NOT NULL DEFAULT '[]'::jsonb;
+
 CREATE TABLE IF NOT EXISTS timetable (
   id       text PRIMARY KEY,
   res_id   text NOT NULL REFERENCES venues(id)  ON DELETE RESTRICT,
