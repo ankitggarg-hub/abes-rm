@@ -101,6 +101,11 @@ CREATE TABLE IF NOT EXISTS events (
 );
 CREATE INDEX IF NOT EXISTS events_res_date ON events (res_id, date);
 
+-- Venue lending: a department head books one of their venues for another department, head or person
+ALTER TABLE events ADD COLUMN IF NOT EXISTS for_dept_id  text REFERENCES departments(id) ON DELETE SET NULL;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS lent_dept_id text REFERENCES departments(id) ON DELETE SET NULL;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS lent_by      text NOT NULL DEFAULT '';
+
 -- Server-side sign-in sessions: lets us sign out for real, time out idle users and revoke on password/role change
 CREATE TABLE IF NOT EXISTS sessions (
   id         text PRIMARY KEY,
