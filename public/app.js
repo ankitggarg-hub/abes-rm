@@ -542,9 +542,15 @@ function modalHTML(){
         '<div class="frow">'+fld('From period',sel('from',slotOpts(),v.from))+fld('To period',sel('to',slotOpts(),v.to))+'</div>'+
         fld('Year and section',sel('classId',[['','Choose year and section']].concat(fdCl.map(function(c){return [c.id,classFull(c)]})),v.classId||''))+
         fld('Subject or session',tin('title',v.title,'required autocomplete="off"'))+fld('Faculty (optional)',tin('faculty',v.faculty,'autocomplete="off"'));break}
-    case 'lend':{var du=deptById(me().deptId),ownR=S.resources.filter(function(r){return r.deptId===me().deptId}),r3=resById(v.resId);title='Lend a venue';
+    case 'lend':{var du=deptById(me().deptId),ownAll=S.resources.filter(function(r){return r.deptId===me().deptId}),lwin=slotRange(v.from,v.to),
+        ownR=(v.date&&v.date>=today&&lwin.length)?ownAll.filter(function(r){return lwin.every(function(sx){return !busyAt(r.id,v.date,sx.id)})}):[],
+        r3;
+      if(!ownR.some(function(r){return r.id===v.resId}))v.resId=ownR.length?ownR[0].id:'';
+      r3=resById(v.resId);title='Lend a venue';
       extra='<p class="ctx">Booked for someone else from '+(du?esc(du.name):'your department')+'’s venues. It is confirmed immediately.'+(r3?' '+esc(r3.type)+' · '+r3.capacity+' seats · '+esc(locStr(r3)):'')+'</p>';
-      body=fld('Venue',sel('resId',ownR.map(function(r){return [r.id,r.name+' ('+r.capacity+' seats)']}),v.resId))+'<div class="frow">'+fld('Date',tin('date',v.date,'type="date" required'))+fld('Expected attendees',tin('attendees',v.attendees||'','type="number" min="1"'))+'</div><div class="frow">'+fld('From',sel('from',slotOpts(),v.from))+fld('To',sel('to',slotOpts(),v.to))+'</div>'+
+      var lsel=function(n,val){return sel(n,slotOpts(),val).replace('<select ','<select data-lendref="1" ')};
+      body='<div class="frow">'+fld('Date',tin('date',v.date,'type="date" required data-lendref="1"'))+fld('Expected attendees',tin('attendees',v.attendees||'','type="number" min="1"'))+'</div><div class="frow">'+fld('From',lsel('from',v.from))+fld('To',lsel('to',v.to))+'</div>'+
+        fld('Venue (only venues free at that time)',ownR.length?sel('resId',ownR.map(function(r){return [r.id,r.name+' ('+r.capacity+' seats)']}),v.resId):'<p class="err" style="margin:0">None of '+(du?esc(du.code):'your')+' venues is free for that whole time. Change the date or time.</p>')+
         fld('Lend to',lendToHTML(v.toWho))+fld('Name, only if “Someone else”',tin('forName',v.forName,'autocomplete="off"'))+fld('Purpose',tin('title',v.title,'required autocomplete="off" placeholder="Guest lecture, exam, workshop"'))+fld('Notes',tin('notes',v.notes,'placeholder="Equipment, seating, contact person"'));break}
     case 'book':{var r2=resById(v.resId);title='Book '+(r2?r2.name:'venue');
       extra='<p class="ctx">'+(r2?esc(r2.type)+' · '+r2.capacity+' seats · '+esc(locStr(r2)):'')+'</p>';
@@ -714,7 +720,7 @@ function submitForm(type,d){
   if(type==='lend'){
     var u0=me(),lr=resById(v.resId);
     v.title=(v.title||'').trim();
-    if(!lr||lr.deptId!==u0.deptId)return fail('Choose one of your department’s venues.',d);
+    if(!lr||lr.deptId!==u0.deptId)return fail('No venue of yours is free at that time. Change the date or time.',d);
     if(!v.title||!v.date)return fail('Enter the purpose and the date.',d);
     if(v.date<today)return fail('Choose today or a later date.',d);
     if(!v.toWho)return fail('Choose who the venue is lent to.',d);
@@ -817,6 +823,8 @@ document.addEventListener('click',function(e){
 });
 document.addEventListener('change',function(e){
   var mfs=e.target.closest('select[data-mf]');if(mfs){ui.mf[mfs.dataset.mf]=mfs.value;render();return}
+  var lr=e.target.closest('[data-lendref]');
+  if(lr&&ui.modal&&ui.modal.type==='lend'){var lfm=lr.closest('form'),lfd={};new FormData(lfm).forEach(function(val,key){lfd[key]=val});ui.modal.vals=Object.assign({},ui.modal.vals,lfd);ui.modal.err='';render();return}
   var mv=e.target.closest('[data-mv]');
   if(mv&&ui.modal){var fm=mv.closest('form'),fd={};new FormData(fm).forEach(function(val,key){fd[key]=val});fd.mvDay=+fd.mvDay;fd.moveTo=fd.moveTo||'';ui.modal.vals=Object.assign({},ui.modal.vals,fd);ui.modal.err='';ui.modal.focused=true;render();return}
   var al=e.target.closest('[data-alloc]');
