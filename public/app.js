@@ -102,7 +102,7 @@ function updateSync(){var el=document.getElementById('sync');if(el)el.innerHTML=
 
 var today=iso(new Date());
 var ui={booting:true,loginErr:'',loginBusy:false,userId:null,tab:'overview',mtab:'depts',ttDept:null,ttRes:null,ttMode:'week',ttDay:0,
-  trDept:null,trView:'plan',rpDept:null,rpPeriod:'all',rpKind:'',trClass:'',trWeek:mondayOf(today),trMonth:today.slice(0,7),avDate:today,lnDate:today,lnFrom:null,lnTo:null,lnType:'',avFrom:null,avTo:null,avType:'',avCap:'',avBld:'',avFl:'',mf:{},chDept:null,chClass:'',chFrom:today,chTo:today,chSlotA:'',chSlotB:'',chReason:'Industrial visit',chNote:'',modal:null,confirm:null,evShowPast:false};
+  dbDate:today,dbFrom:null,dbTo:null,dbBld:'',dbFl:'',dbType:'',trDept:null,trView:'plan',rpDept:null,rpPeriod:'all',rpKind:'',trClass:'',trWeek:mondayOf(today),trMonth:today.slice(0,7),avDate:today,lnDate:today,lnFrom:null,lnTo:null,lnType:'',avFrom:null,avTo:null,avType:'',avCap:'',avBld:'',avFl:'',mf:{},chDept:null,chClass:'',chFrom:today,chTo:today,chSlotA:'',chSlotB:'',chReason:'Industrial visit',chNote:'',modal:null,confirm:null,evShowPast:false};
 
 /* ---------- selectors ---------- */
 var slotList=function(){return S.slots.slice().sort(function(a,b){return a.start.localeCompare(b.start)})};
@@ -174,11 +174,45 @@ function busyAt(resId,date,slotId){
   if(isClosed(date))return {kind:'closed'};
   return null;
 }
+function dbDefault(){
+  var sl=slotList().filter(function(x){return !x.isBreak}),n=new Date(),m=n.getHours()*60+n.getMinutes();
+  var c=sl.filter(function(x){return toMin(x.start)<=m&&m<toMin(x.end)})[0]||sl.filter(function(x){return toMin(x.start)>m})[0]||sl[0];
+  return c?c.id:null;
+}
+// Dashboard: how many venues of each kind are free in a chosen window, narrowed by building and floor.
+function vDashAvail(){
+  var sl=slotList();
+  if(!sl.length||!ui.dbFrom)return '<section class="panel"><h3>Available venues</h3><p class="note" style="margin:0">No time slots are defined yet. Ask the administrator to add them in Masters.</p></section>';
+  var win=slotRange(ui.dbFrom,ui.dbTo).map(function(x){return x.id}),date=ui.dbDate;
+  var pool=S.resources.filter(function(r){return (!ui.dbBld||r.buildingId===ui.dbBld)&&(!ui.dbFl||r.floorId===ui.dbFl)});
+  var isFree=function(r){return win.every(function(id){return !busyAt(r.id,date,id)})};
+  var first=slotById(win[0]),last=slotById(win[win.length-1]);
+  var kinds=[['','All venues']].concat(TYPES.map(function(t){return [t,t]}));
+  var cards=kinds.map(function(c,i){
+    var L=pool.filter(function(r){return !c[0]||r.type===c[0]});
+    if(c[0]&&!L.length)return '';
+    var f=L.filter(isFree),seats=f.reduce(function(a,r){return a+r.capacity},0),pc=L.length?Math.round(f.length/L.length*100):0,on=ui.dbType===c[0];
+    return '<button class="kpi'+(on?' on':'')+(f.length?'':' none')+'" style="--h:'+(i?(i*47)%360:215)+'" data-act="dbtype" data-t="'+esc(c[0])+'" aria-pressed="'+on+'"><span class="kt">'+esc(c[1])+'</span><b>'+f.length+'</b><span class="ks">free of '+L.length+' · '+seats+' seats</span><span class="kbar"><i style="width:'+pc+'%"></i></span></button>';
+  }).join('');
+  var shown=pool.filter(function(r){return (!ui.dbType||r.type===ui.dbType)&&isFree(r)}).sort(function(a,b){return TYPES.indexOf(a.type)-TYPES.indexOf(b.type)||a.capacity-b.capacity});
+  var list=shown.length?'<div class="cards">'+shown.slice(0,12).map(function(r){return '<div class="card vfree"><h4>'+tcode(r.type)+esc(r.name)+'</h4><div class="meta">'+esc(r.type)+' · '+esc(locStr(r))+'</div><div><b class="mono">'+r.capacity+'</b> seats · '+dtag(r.deptId)+'</div>'+(canBook()?'<div><button class="btn primary sm" data-act="book" data-res="'+r.id+'" data-from="'+win[0]+'" data-to="'+win[win.length-1]+'">Book</button></div>':'')+'</div>'}).join('')+'</div>'+(shown.length>12?'<p class="note" style="margin:8px 0 0">+'+(shown.length-12)+' more. <button class="link" data-act="dbopen">Open the full day view</button></p>':''):emptyBox('No venue is free for the whole window with these filters. Try fewer periods or another building.');
+  var bar='<div class="filters">'+
+    '<label>Date<input type="date" value="'+date+'" data-set="dbDate"></label>'+
+    '<div class="seg"><button class="btn sm" data-act="dbday" data-n="-1">Prev day</button><button class="btn sm" data-act="dbnow">Now</button><button class="btn sm" data-act="dbday" data-n="1">Next day</button></div>'+
+    '<label>From<select data-set="dbFrom">'+slotOpts().map(function(o){return '<option value="'+o[0]+'"'+(o[0]===ui.dbFrom?' selected':'')+'>'+esc(o[1])+'</option>'}).join('')+'</select></label>'+
+    '<label>To<select data-set="dbTo">'+slotOpts().map(function(o){return '<option value="'+o[0]+'"'+(o[0]===ui.dbTo?' selected':'')+'>'+esc(o[1])+'</option>'}).join('')+'</select></label>'+
+    '<label>Building<select data-set="dbBld"><option value="">All buildings</option>'+bldOpts().map(function(o){return '<option value="'+o[0]+'"'+(o[0]===ui.dbBld?' selected':'')+'>'+esc(o[1])+'</option>'}).join('')+'</select></label>'+
+    '<label>Floor<select data-set="dbFl"><option value="">All floors</option>'+floorOpts().map(function(o){return '<option value="'+o[0]+'"'+(o[0]===ui.dbFl?' selected':'')+'>'+esc(o[1])+'</option>'}).join('')+'</select></label>'+
+    '<button class="btn sm" data-act="dbopen">Open in Availability</button></div>';
+  return '<section class="panel dashav"><h3>Available venues</h3><p class="note" style="margin:2px 0 12px">'+fmtDate(date)+' · '+esc(first?first.start:'')+'–'+esc(last?last.end:'')+(isClosed(date)?' · off day, venues are closed':'')+'. Choose a card to list those venues.</p>'+bar+'<div class="kpis">'+cards+'</div><h4 class="kl">'+(ui.dbType?esc(ui.dbType)+' venues':'All free venues')+' · '+shown.length+' free</h4>'+list+'</section>';
+}
 function ensure(){
   var sl=slotList();
   if(S.users.length&&!S.users.some(function(u){return u.id===ui.userId}))ui.userId=S.users[0].id;
   if(!ui.avFrom||!slotById(ui.avFrom))ui.avFrom=sl.length?sl[0].id:null;
   if(!ui.avTo||!slotById(ui.avTo))ui.avTo=sl.length?sl[Math.min(1,sl.length-1)].id:null;
+  if(!ui.dbFrom||!slotById(ui.dbFrom)){ui.dbFrom=dbDefault();ui.dbTo=ui.dbFrom}
+  if(!ui.dbTo||!slotById(ui.dbTo))ui.dbTo=ui.dbFrom;
   if(!ui.lnFrom||!slotById(ui.lnFrom))ui.lnFrom=ui.avFrom;
   if(!ui.lnTo||!slotById(ui.lnTo))ui.lnTo=ui.avTo;
   if(!ui.ttDept||!deptById(ui.ttDept))ui.ttDept=S.depts.length?S.depts[0].id:null;
@@ -189,7 +223,7 @@ function tabsFor(r){
   if(r==='admin')return [['overview','Overview'],['avail','Availability'],ev,['timetable','Timetables'],['classes','Rooms by class'],['changes','Class changes'],['track','Academic tracker'],['masters','Masters']];
   if(r==='hod')return [['overview','Overview'],['timetable','My timetable'],['changes','Class changes'],['classes','Rooms by class'],['avail','Availability'],['lend','Lend a venue'],['track','Academic tracker'],ev];
   if(r==='head')return [['overview','Overview'],['avail','Find a venue'],['changes','Class changes'],['classes','Rooms by class'],['track','Academic tracker'],ev];
-  if(r==='viewer')return [['avail','Find a venue']];
+  if(r==='viewer')return [['dash','Dashboard'],['avail','Find a venue']];
   return [['overview','Overview'],['classes','Rooms by class'],['avail','Find a venue'],ev];
 }
 
@@ -236,8 +270,7 @@ function vOverview(){
   else {freeHtml='<p class="note">Today\'s periods are over. Open Availability to check tomorrow.</p>'}
   return '<div class="head"><div><h2>Good to see you, '+esc(u.name.split(' (')[0])+'</h2><p>'+({admin:'Set up masters, allocate venues to departments and keep an eye on usage.',hod:'Plan your department’s daily and weekly timetable on the venues allocated to you.',head:'See which halls, labs and theatres are free and approve event requests.',stakeholder:'Find a free venue for your event and send a booking request.'})[u.role]+'</p></div></div>'+
   '<div class="strip"><div><b>'+S.resources.length+'</b><span>Venues in inventory</span></div><div><b>'+central+'</b><span>Unallocated, open for events</span></div><div><b>'+weekEv+'</b><span>Events in the next 7 days</span></div><div><b>'+pend+'</b><span>Requests awaiting approval</span></div></div>'+
-  '<div class="cols"><section class="panel"><h3>Free right now</h3>'+freeHtml+'</section>'+
-  '<section class="panel"><h3>Upcoming events</h3>'+(up.length?'<ul class="list">'+up.map(function(e){var r=resById(e.resId);return '<li><span><b>'+esc(e.title)+'</b><br><span class="note">'+esc(r?r.name:'Removed venue')+' · '+fmtDate(e.date)+' · <span class="mono">'+timeRange(e.slotIds)+'</span></span></span>'+statusBadge(e.status)+'</li>'}).join('')+'</ul>':emptyBox('No events are booked yet. Use Availability to book one.'))+'</section></div>'+
+  vDashAvail()+'<div class="cols"><section class="panel"><h3>Upcoming events</h3>'+(up.length?'<ul class="list">'+up.map(function(e){var r=resById(e.resId);return '<li><span><b>'+esc(e.title)+'</b><br><span class="note">'+esc(r?r.name:'Removed venue')+' · '+fmtDate(e.date)+' · <span class="mono">'+timeRange(e.slotIds)+'</span></span></span>'+statusBadge(e.status)+'</li>'}).join('')+'</ul>':emptyBox('No events are booked yet. Use Availability to book one.'))+'</section></div>'+
   freedPanel()+lentToPanel()+'<section class="panel"><h3>Weekly timetable load by department</h3>'+(S.depts.length?'<div class="ub">'+bars+'</div>':emptyBox('Add departments in Masters.'))+'<p class="note" style="margin-bottom:0">Share of the '+perWeek+' weekly slots per venue that have a class scheduled.</p></section>';
 }
 
@@ -903,7 +936,7 @@ function render(){
   head.innerHTML='<div class="bar">'+brand+
     '<div class="who"><span id="sync" class="syncwrap"></span><span class="me" title="'+esc(u.email)+'"><b>'+esc(u.name)+'</b> · '+ROLE[u.role]+'</span><button class="btn sm" data-act="logout">Sign out</button><button class="btn sm" data-act="logoutall" title="Sign out on every device where you are signed in">Sign out everywhere</button></div></div>'+
     '<nav class="tabs" role="tablist" aria-label="Sections">'+tabs.map(function(t){return '<button class="tab" role="tab" aria-selected="'+(t[0]===ui.tab)+'" data-act="tab" data-v="'+t[0]+'">'+t[1]+'</button>'}).join('')+'</nav>';
-  document.getElementById('main').innerHTML={overview:vOverview,avail:vAvail,events:vEvents,lend:vLend,track:vTrack,timetable:vTimetable,classes:vClasses,changes:vChanges,masters:vMasters}[ui.tab]();
+  document.getElementById('main').innerHTML={dash:function(){return '<div class="head"><div><h2>Available venues</h2><p>See which venues are free on a day and time.</p></div></div>'+vDashAvail()},overview:vOverview,avail:vAvail,events:vEvents,lend:vLend,track:vTrack,timetable:vTimetable,classes:vClasses,changes:vChanges,masters:vMasters}[ui.tab]();
   document.getElementById('modalRoot').innerHTML=modalHTML();
   document.getElementById('foot').innerHTML='<span>Signed in as '+esc(u.email||u.name)+'</span>';
   updateSync();
@@ -1149,6 +1182,10 @@ document.addEventListener('click',function(e){
     case 'syncnow':save();break;
     case 'tab':ui.tab=d.v;break;
     case 'mfclear':Object.keys(ui.mf).forEach(function(k){if(k.indexOf(d.t+'.')===0)delete ui.mf[k]});break;
+    case 'dbtype':ui.dbType=ui.dbType===d.t?'':d.t;break;
+    case 'dbday':ui.dbDate=d.n==='0'?today:addDays(ui.dbDate,+d.n);break;
+    case 'dbnow':ui.dbDate=today;ui.dbFrom=dbDefault();ui.dbTo=ui.dbFrom;break;
+    case 'dbopen':ui.avDate=ui.dbDate;ui.avFrom=ui.dbFrom;ui.avTo=ui.dbTo;ui.avType=ui.dbType;ui.avBld=ui.dbBld;ui.avFl=ui.dbFl;ui.avCap='';ui.tab='avail';window.scrollTo(0,0);break;
     case 'seefree':ui.avDate=today;ui.avFrom=d.slot;ui.avTo=d.slot;ui.avType='';ui.avBld='';ui.avFl='';ui.avCap='';ui.tab='avail';window.scrollTo(0,0);break;
     case 'mtab':ui.mtab=d.v;break;
     case 'mode':ui.ttMode=d.v;break;
