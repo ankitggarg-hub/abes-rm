@@ -13,8 +13,19 @@ CREATE TABLE IF NOT EXISTS classes (
   year     int  NOT NULL,
   section  text NOT NULL,
   strength int  NOT NULL DEFAULT 0,
+  tracked  boolean NOT NULL DEFAULT false,
   UNIQUE (dept_id, year, section)
 );
+-- Academic tracker mapping: only mapped years and sections appear in the tracker.
+-- Existing sections are mapped once, when the column is first added; after that the administrator decides.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'classes' AND column_name = 'tracked') THEN
+    ALTER TABLE classes ADD COLUMN tracked boolean NOT NULL DEFAULT false;
+    UPDATE classes SET tracked = true;
+  END IF;
+END $$;
+
 
 CREATE TABLE IF NOT EXISTS slots (
   id         text PRIMARY KEY,
