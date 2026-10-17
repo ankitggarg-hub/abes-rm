@@ -348,3 +348,9 @@ h1,h2,h3{letter-spacing:-.02em;font-weight:700}
 .tcode{background:var(--accent-soft);color:var(--accent)}
 body{background:linear-gradient(var(--accent-soft),var(--bg) 300px) no-repeat,var(--bg)}
 main>*{min-width:0;max-width:100%}
+
+/* class change and part-day markers in the tracker calendar */
+.cal.cc{background:#FFE9D2;border-color:#F2B27A}
+.cal.part{background:repeating-linear-gradient(135deg,var(--free-soft) 0 8px,#FFF3D4 8px 16px);border-color:#F2C65A}
+.lg.cc{background:#FFE9D2}.lg.part{background:#FFF3D4}
+@media (prefers-color-scheme:dark){.cal.cc{background:#4a2f17;border-color:#8a5a2a}.cal.part{background:repeating-linear-gradient(135deg,var(--free-soft) 0 8px,#3A2E0E 8px 16px)}.lg.cc{background:#4a2f17}.lg.part{background:#3A2E0E}}
