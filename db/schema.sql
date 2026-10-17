@@ -139,6 +139,9 @@ CREATE TABLE IF NOT EXISTS holidays (
 );
 -- for databases created before working-day conversions existed
 ALTER TABLE holidays ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'off' CHECK (kind IN ('off','working'));
+-- part-day off days: only the periods from slot_from to slot_to
+ALTER TABLE holidays ADD COLUMN IF NOT EXISTS slot_from text REFERENCES slots(id) ON DELETE RESTRICT;
+ALTER TABLE holidays ADD COLUMN IF NOT EXISTS slot_to   text REFERENCES slots(id) ON DELETE RESTRICT;
 CREATE INDEX IF NOT EXISTS holidays_dates ON holidays (date_from, date_to);
 
 CREATE TABLE IF NOT EXISTS week_plans (
