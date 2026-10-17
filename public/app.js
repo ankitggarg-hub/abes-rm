@@ -17,7 +17,7 @@ var toMin=function(t){var p=t.split(':');return +p[0]*60+ +p[1]};
 var uid=function(p){return p+Math.random().toString(36).slice(2,8)};
 
 /* ---------- state ---------- */
-var KEYS=['depts','classes','slots','buildings','floors','resources','users','tt','releases','events','loads','holidays','wplans'];
+var KEYS=['depts','classes','slots','buildings','floors','resources','users','tt','releases','events','vreqs','loads','holidays','wplans'];
 var LOAD_KINDS=['Academic','Training'];
 function emptyState(){var o={};KEYS.forEach(function(k){o[k]=[]});return o}
 var S=emptyState();
@@ -102,7 +102,7 @@ function updateSync(){var el=document.getElementById('sync');if(el)el.innerHTML=
 
 var today=iso(new Date());
 var ui={booting:true,loginErr:'',loginBusy:false,userId:null,tab:'overview',mtab:'depts',ttDept:null,ttRes:null,ttMode:'week',ttDay:0,
-  dbDate:today,dbFrom:null,dbTo:null,dbBld:'',dbFl:'',dbType:'',trDept:null,trView:'plan',rpDept:null,rpPeriod:'all',rpKind:'',trClass:'',trWeek:mondayOf(today),trMonth:today.slice(0,7),avDate:today,lnDate:today,lnFrom:null,lnTo:null,lnType:'',avFrom:null,avTo:null,avType:'',avCap:'',avBld:'',avFl:'',mf:{},chDept:null,chClass:'',chFrom:today,chTo:today,chSlotA:'',chSlotB:'',chReason:'Industrial visit',chNote:'',modal:null,confirm:null,evShowPast:false};
+  dbDate:today,dbFrom:null,dbTo:null,dbBld:'',dbFl:'',dbType:'',trDept:null,trView:'plan',rpDept:null,rpPeriod:'all',rpKind:'',trClass:'',trWeek:mondayOf(today),trMonth:today.slice(0,7),avDate:today,lnDate:today,lnFrom:null,lnTo:null,lnType:'',rqDate:today,rqFrom:null,rqTo:null,rqType:'',rqDept:'',avFrom:null,avTo:null,avType:'',avCap:'',avBld:'',avFl:'',mf:{},chDept:null,chClass:'',chFrom:today,chTo:today,chSlotA:'',chSlotB:'',chReason:'Industrial visit',chNote:'',modal:null,confirm:null,evShowPast:false};
 
 /* ---------- selectors ---------- */
 var slotList=function(){return S.slots.slice().sort(function(a,b){return a.start.localeCompare(b.start)})};
@@ -215,13 +215,17 @@ function ensure(){
   if(!ui.dbTo||!slotById(ui.dbTo))ui.dbTo=ui.dbFrom;
   if(!ui.lnFrom||!slotById(ui.lnFrom))ui.lnFrom=ui.avFrom;
   if(!ui.lnTo||!slotById(ui.lnTo))ui.lnTo=ui.avTo;
+  if(!ui.rqFrom||!slotById(ui.rqFrom))ui.rqFrom=ui.avFrom;
+  if(!ui.rqTo||!slotById(ui.rqTo))ui.rqTo=ui.avTo;
   if(!ui.ttDept||!deptById(ui.ttDept))ui.ttDept=S.depts.length?S.depts[0].id:null;
 }
 function tabsFor(r){
   var pend=S.events.filter(function(e){return e.status==='pending'}).length;
+  var inbox=S.vreqs.filter(function(q){return q.status==='pending'&&q.date>=today&&(r==='admin'||myDepts().indexOf(q.ownerDeptId)>-1)}).length;
+  var rq=['inbox','Venue requests'+(inbox?'<span class="count">'+inbox+'</span>':'')];
   var ev=['events','Events'+(canApprove()&&pend?'<span class="count">'+pend+'</span>':'')];
-  if(r==='admin')return [['overview','Overview'],['avail','Availability'],ev,['timetable','Timetables'],['classes','Rooms by class'],['changes','Class changes'],['track','Academic tracker'],['masters','Masters']];
-  if(r==='hod')return [['overview','Overview'],['timetable','My timetable'],['changes','Class changes'],['classes','Rooms by class'],['avail','Availability'],['lend','Lend a venue'],['track','Academic tracker'],ev];
+  if(r==='admin')return [['overview','Overview'],['avail','Availability'],ev,['timetable','Timetables'],['classes','Rooms by class'],['changes','Class changes'],['track','Academic tracker'],rq,['masters','Masters']];
+  if(r==='hod')return [['overview','Overview'],['timetable','My timetable'],['changes','Class changes'],['classes','Rooms by class'],['avail','Availability'],['lend','Lend a venue'],['borrow','Request a venue'],rq,['track','Academic tracker'],ev];
   if(r==='head')return [['overview','Overview'],['avail','Find a venue'],['changes','Class changes'],['classes','Rooms by class'],['track','Academic tracker'],ev];
   if(r==='viewer')return [['dash','Dashboard'],['avail','Find a venue']];
   return [['overview','Overview'],['classes','Rooms by class'],['avail','Find a venue'],ev];
@@ -416,6 +420,75 @@ function lentToPanel(){
   var u=me();if(u.role!=='hod'||!u.deptId)return '';
   var up=S.events.filter(function(e){return myDepts().indexOf(e.forDeptId)>-1&&e.date>=today}).sort(function(a,b){return a.date.localeCompare(b.date)}).slice(0,8);
   return '<section class="panel"><h3>Venues lent to your department</h3>'+(up.length?'<ul class="list">'+up.map(function(e){var r=resById(e.resId),ld=deptById(e.lentDeptId);return '<li><span><b>'+esc(e.title)+'</b><br><span class="note">'+esc(r?r.name:'Removed venue')+' · '+fmtDate(e.date)+' · <span class="mono">'+timeRange(e.slotIds)+'</span>'+(ld?' · lent by '+esc(ld.code):'')+'</span></span></li>'}).join('')+'</ul>':'<p class="note" style="margin:0">No other department has lent you a venue yet.</p>')+'</section>';
+}
+
+
+/* ---------- requesting a venue from another department ---------- */
+function reqBadge(q){
+  var st=q.status==='pending'&&q.date<today?'expired':q.status;
+  var m={pending:['b-wait','Awaiting decision'],approved:['b-ok','Approved'],rejected:['b-no','Rejected'],cancelled:['b-no','Cancelled'],expired:['b-no','Expired']}[st];
+  return '<span class="badge '+m[0]+'">'+m[1]+'</span>';
+}
+function reqRemarks(q){
+  if(q.status==='pending'||q.status==='cancelled')return '<span class="note">'+(q.status==='cancelled'?'Cancelled by the requester':'—')+'</span>';
+  return '<div>'+(q.remarks?esc(q.remarks):'<span class="note">No remarks</span>')+'</div><div class="note">'+esc(q.decidedBy)+(q.decidedAt?' · '+esc(new Date(q.decidedAt).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})):'')+'</div>';
+}
+function reqVenue(q){var r=resById(q.resId);return r?'<b>'+esc(r.name)+'</b><div class="note">'+esc(r.type)+' · '+r.capacity+' seats</div>':'<span class="note">Removed venue</span>'}
+function vBorrow(){
+  var u=me(),md=myDepts(),sl=slotList();
+  var head='<div class="head"><div><h2>Request a venue</h2><p>Pick a date and time, see the venues of other departments (and the central pool) that are free, and send a request. The head of the owning department approves or rejects it with remarks. Nothing is booked until it is approved.</p></div></div>';
+  if(!md.length)return head+emptyBox('No department is linked to this account. Ask the administrator to set it in Masters → Users.');
+  if(!sl.length)return head+emptyBox('No time slots are defined yet.');
+  var date=ui.rqDate,win=slotRange(ui.rqFrom,ui.rqTo).map(function(x){return x.id});
+  var others=S.resources.filter(function(r){return !r.deptId||md.indexOf(r.deptId)<0});
+  var owners=S.depts.filter(function(d){return md.indexOf(d.id)<0&&others.some(function(r){return r.deptId===d.id})});
+  var rs=others.filter(function(r){return (!ui.rqType||r.type===ui.rqType)&&(!ui.rqDept||(ui.rqDept==='_c'?!r.deptId:r.deptId===ui.rqDept))}).sort(function(a,b){return TYPES.indexOf(a.type)-TYPES.indexOf(b.type)||a.capacity-b.capacity});
+  var free=rs.filter(function(r){return win.every(function(id){return !busyAt(r.id,date,id)})});
+  var opt=function(v){return slotOpts().map(function(o){return '<option value="'+o[0]+'"'+(o[0]===v?' selected':'')+'>'+esc(o[1])+'</option>'}).join('')};
+  var filters='<div class="panel"><div class="filters">'+
+    '<label>Date<input type="date" value="'+date+'" min="'+today+'" data-set="rqDate"></label>'+
+    '<label>From<select data-set="rqFrom">'+opt(ui.rqFrom)+'</select></label>'+
+    '<label>To<select data-set="rqTo">'+opt(ui.rqTo)+'</select></label>'+
+    '<label>Owner<select data-set="rqDept"><option value="">All departments</option>'+owners.map(function(d){return '<option value="'+d.id+'"'+(ui.rqDept===d.id?' selected':'')+'>'+esc(d.code+' – '+d.name)+'</option>'}).join('')+(others.some(function(r){return !r.deptId})?'<option value="_c"'+(ui.rqDept==='_c'?' selected':'')+'>Central pool</option>':'')+'</select></label>'+
+    '<label>Venue type<select data-set="rqType"><option value="">All types</option>'+TYPES.filter(function(t){return others.some(function(r){return r.type===t})}).map(function(t){return '<option'+(t===ui.rqType?' selected':'')+'>'+t+'</option>'}).join('')+'</select></label>'+
+    '</div></div>';
+  var cards;
+  if(date<today)cards=emptyBox('That date has passed. Choose today or a later date.');
+  else if(!win.length)cards=emptyBox('Choose a time that is not a break.');
+  else cards=free.length?'<div class="cards">'+free.map(function(r){
+    var o=deptById(r.deptId),h=r.deptId?hodOf(r.deptId):null,sent=S.vreqs.some(function(q){return q.resId===r.id&&q.date===date&&q.status==='pending'&&q.requestedById===u.id});
+    return '<div class="card vfree"><h4>'+tcode(r.type)+esc(r.name)+'</h4><div class="meta">'+esc(r.type)+' · '+esc(locStr(r))+'</div><div><b class="mono">'+r.capacity+'</b> seats · '+dtag(r.deptId)+'</div><div class="meta">'+esc(r.equipment||'No equipment listed')+'</div><div class="meta">Approver: '+(h?esc(h.name):o?'head of '+esc(o.code):'administrator')+'</div>'+awayNote(r.id,date,win)+'<div>'+(sent?'<span class="badge b-wait">Request already sent</span>':'<button class="btn primary sm" data-act="vreq" data-res="'+r.id+'">Request this venue</button>')+'</div></div>';
+  }).join('')+'</div>':emptyBox('No venue of another department is free for the whole of that time. Try another time or date.');
+  var sub=(date>=today&&win.length)?'<h3 style="margin-bottom:10px">'+free.length+' venue'+(free.length===1?'':'s')+' free from '+slotById(win[0]).start+' to '+slotById(win[win.length-1]).end+' on '+fmtDate(date)+'</h3>':'';
+  var mine=S.vreqs.filter(function(q){return q.requestedById===u.id}).sort(function(a,b){return (b.createdAt||'').localeCompare(a.createdAt||'')});
+  var rows=mine.map(function(q){var k='rq:'+q.id;return '<tr><td class="mono" style="white-space:nowrap">'+fmtDate(q.date)+'</td><td class="mono" style="white-space:nowrap">'+timeRange(q.slotIds)+'</td><td>'+reqVenue(q)+'</td><td>'+esc(q.title)+(q.reason?'<div class="note">'+esc(q.reason)+'</div>':'')+'</td><td>'+dtag(q.ownerDeptId)+'</td><td>'+reqBadge(q)+'</td><td>'+reqRemarks(q)+'</td><td>'+(q.status==='pending'?'<button class="btn sm danger" data-act="vcancel" data-id="'+q.id+'">'+(ui.confirm===k?'Confirm cancel':'Cancel request')+'</button>':'')+'</td></tr>'}).join('');
+  var list='<section><h3 style="margin-bottom:10px">My requests</h3>'+(mine.length?'<div class="scroll"><table class="tbl"><thead><tr><th>Date</th><th>Time</th><th>Venue</th><th>Purpose</th><th>Owner</th><th>Status</th><th>Remarks</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>':emptyBox('You have not requested a venue yet.'))+'</section>';
+  return head+filters+'<section>'+sub+cards+'</section>'+list;
+}
+function vInbox(){
+  var u=me(),admin=u.role==='admin',md=myDepts();
+  var head='<div class="head"><div><h2>Venue requests</h2><p>'+(admin?'Requests for venues you can decide as administrator, including the central pool.':'Other departments asking to use venues of '+esc(deptLabel(md)||'your department')+'. Approving books the venue for them straight away; rejecting needs a remark.')+'</p></div></div>';
+  var all=S.vreqs.filter(function(q){return admin||md.indexOf(q.ownerDeptId)>-1}).sort(function(a,b){return a.date.localeCompare(b.date)||(a.createdAt||'').localeCompare(b.createdAt||'')});
+  var pend=all.filter(function(q){return q.status==='pending'&&q.date>=today}),hist=all.filter(function(q){return !(q.status==='pending'&&q.date>=today)}).reverse();
+  var from=function(q){var d=deptById(q.fromDeptId);return esc(q.requestedBy)+(d?'<div class="note">'+esc(d.code+' – '+d.name)+'</div>':'')};
+  var pc=pend.map(function(q){var r=resById(q.resId);return '<div class="card"><h4>'+esc(q.title)+'</h4><div class="meta">'+fmtDate(q.date)+' · <span class="mono">'+timeRange(q.slotIds)+'</span></div><div>'+reqVenue(q)+'</div><div class="meta">From '+from(q)+'</div>'+(q.attendees?'<div class="meta">'+q.attendees+' attendees</div>':'')+(q.reason?'<div class="meta">Reason: '+esc(q.reason)+'</div>':'')+(admin&&q.ownerDeptId?'<div class="meta">Owner: '+dtag(q.ownerDeptId)+'</div>':'')+'<div style="display:flex;gap:8px;margin-top:6px"><button class="btn primary sm" data-act="vdecide" data-id="'+q.id+'" data-v="approved">Approve</button><button class="btn sm danger" data-act="vdecide" data-id="'+q.id+'" data-v="rejected">Reject</button></div></div>'}).join('');
+  var hr=hist.map(function(q){return '<tr><td class="mono" style="white-space:nowrap">'+fmtDate(q.date)+'</td><td class="mono" style="white-space:nowrap">'+timeRange(q.slotIds)+'</td><td>'+reqVenue(q)+'</td><td>'+from(q)+'</td><td>'+esc(q.title)+'</td><td>'+reqBadge(q)+'</td><td>'+reqRemarks(q)+'</td></tr>'}).join('');
+  return head+'<section><h3 style="margin-bottom:10px">Waiting for your decision'+(pend.length?' ('+pend.length+')':'')+'</h3>'+(pend.length?'<div class="cards">'+pc+'</div>':emptyBox('No requests are waiting.'))+'</section>'+
+    '<section><h3 style="margin-bottom:10px">History</h3>'+(hist.length?'<div class="scroll"><table class="tbl"><thead><tr><th>Date</th><th>Time</th><th>Venue</th><th>From</th><th>Purpose</th><th>Status</th><th>Decision</th></tr></thead><tbody>'+hr+'</tbody></table></div>':emptyBox('Nothing decided yet.'))+'</section>';
+}
+function vreqModal(v){
+  var r=resById(v.resId),md=myDepts();
+  var ctx='<p class="ctx">'+(r?esc(r.name)+' · '+esc(r.type)+' · '+r.capacity+' seats · '+esc(locStr(r)):'')+'<br>'+fmtDate(v.date)+' · '+timeRange(slotRange(v.from,v.to).map(function(x){return x.id}))+'</p><p class="note" style="margin:0">Sent to '+(r&&r.deptId?'the head of '+esc((deptById(r.deptId)||{}).name||''):'the administrator')+'. The venue is booked only after approval.</p>';
+  var body=(md.length>1?fld('Request for',sel('fromDeptId',md.map(function(i){var d=deptById(i);return [i,d?d.code+' – '+d.name:i]}),v.fromDeptId||md[0])):'')+
+    fld('Purpose',tin('title',v.title,'required autocomplete="off" placeholder="Guest lecture, exam, workshop"'))+
+    '<div class="frow">'+fld('Expected attendees',tin('attendees',v.attendees||'','type="number" min="1"'))+'</div>'+
+    fld('Why do you need this venue?','<textarea id="f-reason" name="reason" rows="3" maxlength="500" placeholder="For example: our labs are full that day">'+esc(v.reason||'')+'</textarea>');
+  return {title:'Request a venue',extra:ctx,body:body};
+}
+function vdecModal(v){
+  var q=S.vreqs.filter(function(x){return x.id===v.id})[0],ok=v.decision==='approved';
+  return {title:(ok?'Approve':'Reject')+' request',extra:q?'<p class="ctx"><b>'+esc(q.title)+'</b><br>'+fmtDate(q.date)+' · '+timeRange(q.slotIds)+'<br>From '+esc(q.requestedBy)+'</p>':'',
+    body:fld(ok?'Remarks (optional)':'Remarks (required, the requester will see them)','<textarea id="f-remarks" name="remarks" rows="3" maxlength="500" '+(ok?'':'required ')+'placeholder="'+(ok?'Any conditions, for example: leave the room tidy':'Why the venue cannot be lent')+'">'+esc(v.remarks||'')+'</textarea>')};
 }
 
 /* ---------- weekly tracker of academic and training hours ---------- */
@@ -899,13 +972,15 @@ function modalHTML(){
       body='<div class="frow">'+fld('Date',tin('date',v.date,'type="date" required data-lendref="1"'))+fld('Expected attendees',tin('attendees',v.attendees||'','type="number" min="1"'))+'</div><div class="frow">'+fld('From',lsel('from',v.from))+fld('To',lsel('to',v.to))+'</div>'+
         fld('Venue (only venues free at that time)',ownR.length?sel('resId',ownR.map(function(r){return [r.id,r.name+' ('+r.capacity+' seats)']}),v.resId):'<p class="err" style="margin:0">None of '+(myDepts().length?esc(deptLabel(myDepts())):'your')+' venues is free for that whole time. Change the date or time.</p>')+
         fld('Lend to',lendToHTML(v.toWho))+fld('Name, only if “Someone else”',tin('forName',v.forName,'autocomplete="off"'))+fld('Purpose',tin('title',v.title,'required autocomplete="off" placeholder="Guest lecture, exam, workshop"'))+fld('Notes',tin('notes',v.notes,'placeholder="Equipment, seating, contact person"'));break}
+    case 'vreq':{var vq=vreqModal(v);title=vq.title;extra=vq.extra;body=vq.body;break}
+    case 'vdec':{var vd=vdecModal(v);title=vd.title;extra=vd.extra;body=vd.body;break}
     case 'book':{var r2=resById(v.resId);title='Book '+(r2?r2.name:'venue');
       extra='<p class="ctx">'+(r2?esc(r2.type)+' · '+r2.capacity+' seats · '+esc(locStr(r2)):'')+'</p>';
       body=fld('Event title',tin('title',v.title,'required autocomplete="off"'))+'<div class="frow">'+fld('Date',tin('date',v.date,'type="date" required'))+fld('Expected attendees',tin('attendees',v.attendees||'','type="number" min="1"'))+'</div><div class="frow">'+fld('From',sel('from',slotOpts(),v.from))+fld('To',sel('to',slotOpts(),v.to))+'</div>'+fld('Organiser',tin('by',v.by,'required'+(me().role==='stakeholder'?' readonly':'')))+fld('Notes',tin('notes',v.notes,'placeholder="Equipment, speakers, seating"'));
       if(!canApprove())extra+='<p class="note" style="margin:0">Your request is sent to the head of institute. The slots are held until it is approved or declined.</p>';break}
   }
   var del=m.type==='tt'&&v.id?'<button type="button" class="btn danger" data-act="ttdel" data-id="'+v.id+'" style="margin-right:auto">Delete class</button>':'';
-  return '<div class="overlay" data-act="closeModal"><form class="modal" data-form="'+m.type+'" role="dialog" aria-modal="true" aria-label="'+esc(title)+'" novalidate><h2>'+esc(title)+'</h2>'+(m.err?'<p class="err" role="alert">'+esc(m.err)+'</p>':'')+extra+body+'<div class="mfoot">'+del+'<button type="button" class="btn" data-act="closeModal">Cancel</button><button type="submit" class="btn primary">'+(m.type==='book'?(canApprove()?'Confirm booking':'Send request'):m.type==='lend'?'Lend venue':'Save')+'</button></div></form></div>';
+  return '<div class="overlay" data-act="closeModal"><form class="modal" data-form="'+m.type+'" role="dialog" aria-modal="true" aria-label="'+esc(title)+'" novalidate><h2>'+esc(title)+'</h2>'+(m.err?'<p class="err" role="alert">'+esc(m.err)+'</p>':'')+extra+body+'<div class="mfoot">'+del+'<button type="button" class="btn" data-act="closeModal">Cancel</button><button type="submit" class="btn primary">'+(m.type==='book'?(canApprove()?'Confirm booking':'Send request'):m.type==='lend'?'Lend venue':m.type==='vreq'?'Send request':m.type==='vdec'?(v.decision==='approved'?'Approve':'Reject'):'Save')+'</button></div></form></div>';
 }
 
 /* ---------- render ---------- */
@@ -929,7 +1004,7 @@ function render(){
   head.innerHTML='<div class="bar">'+brand+
     '<div class="who"><span id="sync" class="syncwrap"></span><span class="me" title="'+esc(u.email)+'"><b>'+esc(u.name)+'</b> · '+ROLE[u.role]+'</span><button class="btn sm" data-act="logout">Sign out</button><button class="btn sm" data-act="logoutall" title="Sign out on every device where you are signed in">Sign out everywhere</button></div></div>'+
     '<nav class="tabs" role="tablist" aria-label="Sections">'+tabs.map(function(t){return '<button class="tab" role="tab" aria-selected="'+(t[0]===ui.tab)+'" data-act="tab" data-v="'+t[0]+'">'+t[1]+'</button>'}).join('')+'</nav>';
-  document.getElementById('main').innerHTML={dash:function(){return '<div class="head"><div><h2>Available venues</h2><p>See which venues are free on a day and time.</p></div></div>'+vDashAvail()},overview:vOverview,avail:vAvail,events:vEvents,lend:vLend,track:vTrack,timetable:vTimetable,classes:vClasses,changes:vChanges,masters:vMasters}[ui.tab]();
+  document.getElementById('main').innerHTML={dash:function(){return '<div class="head"><div><h2>Available venues</h2><p>See which venues are free on a day and time.</p></div></div>'+vDashAvail()},overview:vOverview,avail:vAvail,events:vEvents,lend:vLend,borrow:vBorrow,inbox:vInbox,track:vTrack,timetable:vTimetable,classes:vClasses,changes:vChanges,masters:vMasters}[ui.tab]();
   document.getElementById('modalRoot').innerHTML=modalHTML();
   document.getElementById('foot').innerHTML='<span>Signed in as '+esc(u.email||u.name)+'</span>';
   updateSync();
@@ -1110,6 +1185,28 @@ function submitForm(type,d){
     S.events.push({id:uid('e'),resId:lr.id,date:v.date,slotIds:sp.map(function(s){return s.id}),title:v.title,by:byTxt,attendees:lat,notes:(v.notes||'').trim(),status:'confirmed',forDeptId:fdept,lentDeptId:lr.deptId,lentBy:u0.name});
     return done('Lent '+lr.name+' to '+byTxt+'.');
   }
+  if(type==='vreq'){
+    var qr=resById(v.resId),qs=slotRange(v.from,v.to),mdq=myDepts();
+    v.title=(v.title||'').trim();v.reason=(v.reason||'').trim();
+    if(!qr||mdq.indexOf(qr.deptId)>-1)return fail('Choose a venue of another department.',d);
+    if(!v.title)return fail('Enter the purpose.',d);
+    if(!v.reason)return fail('Tell the owner why you need this venue.',d);
+    if(v.date<today)return fail('Choose today or a later date.',d);
+    if(!qs.length)return fail('Choose a time that is not a break.',d);
+    var qa=parseInt(v.attendees,10)||0;
+    if(qa>qr.capacity)return fail(qr.name+' seats '+qr.capacity+'. Reduce attendees or pick a larger venue.',d);
+    for(i=0;i<qs.length;i++){var qb=busyAt(qr.id,v.date,qs[i].id);if(qb)return fail(qr.name+' is not free in '+qs[i].label+' on '+fmtDate(v.date)+' ('+busyWhy(qb,v.date)+').',d)}
+    S.vreqs.push({id:uid('q'),resId:qr.id,date:v.date,slotIds:qs.map(function(x){return x.id}),title:v.title,attendees:qa,reason:v.reason,fromDeptId:v.fromDeptId||mdq[0],ownerDeptId:qr.deptId||null,requestedBy:me().name,requestedById:me().id,status:'pending',remarks:'',decidedBy:'',decidedAt:'',createdAt:new Date().toISOString(),eventId:''});
+    return done('Request sent. You will see the decision under My requests.');
+  }
+  if(type==='vdec'){
+    var dq=S.vreqs.filter(function(x){return x.id===v.id})[0];v.remarks=(v.remarks||'').trim();
+    if(!dq||dq.status!=='pending')return fail('This request is no longer pending.',d);
+    if(v.decision==='rejected'&&!v.remarks)return fail('Please give a remark when rejecting a request.',d);
+    if(v.decision==='approved'){var dr=resById(dq.resId);for(i=0;i<dq.slotIds.length;i++){var db2=busyAt(dq.resId,dq.date,dq.slotIds[i]);if(db2)return fail((dr?dr.name:'The venue')+' is no longer free ('+busyWhy(db2,dq.date)+'). Reject the request instead.',d)}}
+    dq.status=v.decision;dq.remarks=v.remarks;dq.decidedBy=me().name;dq.decidedAt=new Date().toISOString();
+    return done(v.decision==='approved'?'Approved. The venue is now booked for '+dq.requestedBy+'.':'Request rejected.');
+  }
   if(type==='book'){
     v.title=(v.title||'').trim();v.by=me().role==='stakeholder'?me().name:(v.by||'').trim();
     if(!v.title||!v.by||!v.date)return fail('Enter a title, a date and the organiser.',d);
@@ -1206,6 +1303,9 @@ document.addEventListener('click',function(e){
       save();toast('Plan copied to '+tg.length+' section'+(tg.length===1?'':'s')+'.');break}
     case 'trclass':ui.trClass=d.id;window.scrollTo(0,0);break;
     case 'lend':openLend(d.res);return;
+    case 'vreq':open('vreq',{resId:d.res,date:ui.rqDate,from:ui.rqFrom,to:ui.rqTo,title:'',attendees:'',reason:'',fromDeptId:myDepts()[0]});return;
+    case 'vdecide':open('vdec',{id:d.id,decision:d.v,remarks:''});return;
+    case 'vcancel':{var vk='rq:'+d.id;if(ui.confirm!==vk){ui.confirm=vk;break}ui.confirm=null;var vc=S.vreqs.filter(function(x){return x.id===d.id})[0];if(vc&&vc.status==='pending'){vc.status='cancelled';save();toast('Request cancelled.')}break}
     case 'book':openBook(d.res,d.from,d.to);return;
     case 'ttcell':{var ex=d.id?S.tt.filter(function(t){return t.id===d.id})[0]:null;open('tt',ex?Object.assign({},ex,{mvDay:ex.day,mvSlot:ex.slotId,moveTo:ex.resId}):{resId:d.res,day:+d.day,slotId:d.slot,title:'',faculty:'',classId:''});return}
     case 'unrel':S.releases=S.releases.filter(function(r){return r.id!==d.id});save();toast('Class restored. Its venue is in use again.');break;

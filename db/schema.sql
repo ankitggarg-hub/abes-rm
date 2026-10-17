@@ -179,3 +179,26 @@ CREATE TABLE IF NOT EXISTS login_attempts (
 -- Venue types: add 'Conference hall' and 'Core lab' (safe to re-run)
 ALTER TABLE venues DROP CONSTRAINT IF EXISTS venues_type_check;
 ALTER TABLE venues ADD CONSTRAINT venues_type_check CHECK (type IN ('Lecture theatre','Computer lab','Seminar hall','Auditorium','Conference hall','Core lab','Tutorial room'));
+
+-- Venue requests: a department head asks another department to lend a venue; the owner approves or rejects with remarks
+CREATE TABLE IF NOT EXISTS venue_requests (
+  id              text PRIMARY KEY,
+  res_id          text NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+  date            date NOT NULL,
+  slot_ids        jsonb NOT NULL,
+  title           text NOT NULL,
+  attendees       int  NOT NULL DEFAULT 0,
+  reason          text NOT NULL DEFAULT '',
+  from_dept_id    text REFERENCES departments(id) ON DELETE SET NULL,
+  owner_dept_id   text REFERENCES departments(id) ON DELETE SET NULL,
+  requested_by    text NOT NULL,
+  requested_by_id text NOT NULL DEFAULT '',
+  status          text NOT NULL CHECK (status IN ('pending','approved','rejected','cancelled')),
+  remarks         text NOT NULL DEFAULT '',
+  decided_by      text NOT NULL DEFAULT '',
+  decided_at      text NOT NULL DEFAULT '',
+  created_at      text NOT NULL DEFAULT '',
+  event_id        text NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS venue_requests_owner ON venue_requests (owner_dept_id, status);
+CREATE INDEX IF NOT EXISTS venue_requests_res_date ON venue_requests (res_id, date);
