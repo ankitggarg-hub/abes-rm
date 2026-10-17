@@ -30,12 +30,14 @@ test('sign-in checks the password and locks after repeated failures', async () =
 
 test('everyone gets the campus data but only admins get the user list', async () => {
   const a = await app.call('GET', '/api/data', { cookie: admin });
-  assert.equal(a.body.data.users.length, 9);
+  assert.equal(a.body.data.users.length, 10);
   assert.equal(a.body.data.resources.length, 15);
   assert.ok(!JSON.stringify(a.body).includes('password'));
   assert.ok(!JSON.stringify(a.body).includes('$2'));
   const h = await app.call('GET', '/api/data', { cookie: hod });
-  assert.equal(h.body.data.users.length, 1);
+  // a head sees themselves plus the other department heads' names (never emails or other roles)
+  assert.equal(h.body.data.users[0].email, h.body.user.email);
+  assert.ok(h.body.data.users.slice(1).every((u) => u.role === 'hod' && u.email === ''));
   assert.equal(h.body.user.role, 'hod');
 });
 

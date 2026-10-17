@@ -9,7 +9,7 @@
     "db:setup": "node scripts/setup-db.js",
     "db:seed-demo": "node scripts/seed-demo.js",
     "dev": "node scripts/dev-server.js",
-    "test": "node --test test/api.test.js test/authz.test.js test/releases.test.js"
+    "test": "node --test test/api.test.js test/authz.test.js test/releases.test.js test/vercel-adapter.test.js test/sessions.test.js test/lending.test.js test/tracker.test.js test/calendar.test.js test/offday.test.js test/viewer.test.js"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.2.0",

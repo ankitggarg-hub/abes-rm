@@ -6,7 +6,7 @@ var DAYS=['Mon','Tue','Wed','Thu','Fri','Sat'];
 var DAYF=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 var TYPES=['Lecture theatre','Computer lab','Seminar hall','Auditorium','Conference hall','Core lab','Tutorial room'];
 var TC={'Lecture theatre':'LT','Computer lab':'LAB','Seminar hall':'SH','Auditorium':'AUD','Conference hall':'CONF','Core lab':'CORE','Tutorial room':'TUT'};
-var ROLE={admin:'Administrator',hod:'Department head',head:'Head of institute',stakeholder:'Stakeholder'};
+var ROLE={admin:'Administrator',hod:'Department head',head:'Head of institute',stakeholder:'Stakeholder',viewer:'Viewer'};
 var esc=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})};
 var z2=function(n){return String(n).padStart(2,'0')};
 var iso=function(d){return d.getFullYear()+'-'+z2(d.getMonth()+1)+'-'+z2(d.getDate())};
@@ -189,6 +189,7 @@ function tabsFor(r){
   if(r==='admin')return [['overview','Overview'],['avail','Availability'],ev,['timetable','Timetables'],['classes','Rooms by class'],['changes','Class changes'],['track','Academic tracker'],['masters','Masters']];
   if(r==='hod')return [['overview','Overview'],['timetable','My timetable'],['changes','Class changes'],['classes','Rooms by class'],['avail','Availability'],['lend','Lend a venue'],['track','Academic tracker'],ev];
   if(r==='head')return [['overview','Overview'],['avail','Find a venue'],['changes','Class changes'],['classes','Rooms by class'],['track','Academic tracker'],ev];
+  if(r==='viewer')return [['avail','Find a venue']];
   return [['overview','Overview'],['classes','Rooms by class'],['avail','Find a venue'],ev];
 }
 

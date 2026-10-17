@@ -63,11 +63,15 @@ CREATE TABLE IF NOT EXISTS users (
   id            text PRIMARY KEY,
   name          text NOT NULL,
   email         text NOT NULL DEFAULT '',
-  role          text NOT NULL CHECK (role IN ('admin','hod','head','stakeholder')),
+  role          text NOT NULL CHECK (role IN ('admin','hod','head','stakeholder','viewer')),
   dept_id       text REFERENCES departments(id) ON DELETE RESTRICT,
   password_hash text,
   created_at    timestamptz NOT NULL DEFAULT now()
 );
+
+-- a view-only role (venue availability only)
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('admin','hod','head','stakeholder','viewer'));
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique ON users (lower(email)) WHERE email <> '';
 
 -- A department head can manage more than one department (the main one stays in dept_id)
