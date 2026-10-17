@@ -225,7 +225,7 @@ function tabsFor(r){
   var rq=['inbox','Venue requests'+(inbox?'<span class="count">'+inbox+'</span>':'')];
   var ev=['events','Events'+(canApprove()&&pend?'<span class="count">'+pend+'</span>':'')];
   if(r==='admin')return [['overview','Overview'],['avail','Availability'],ev,['timetable','Timetables'],['classes','Rooms by class'],['changes','Class changes'],['track','Academic tracker'],rq,['masters','Masters']];
-  if(r==='hod')return [['overview','Overview'],['timetable','My timetable'],['changes','Class changes'],['classes','Rooms by class'],['avail','Availability'],['lend','Lend a venue'],['borrow','Request a venue'],rq,['track','Academic tracker'],ev];
+  if(r==='hod')return [['overview','Overview'],['timetable','My timetable'],['changes','Class changes'],['classes','Rooms by class'],['avail','Availability'],['venues','Venue requests'+(inbox?'<span class="count">'+inbox+'</span>':'')],['track','Academic tracker'],ev];
   if(r==='head')return [['overview','Overview'],['avail','Find a venue'],['changes','Class changes'],['classes','Rooms by class'],['track','Academic tracker'],ev];
   if(r==='viewer')return [['dash','Dashboard'],['avail','Find a venue']];
   return [['overview','Overview'],['classes','Rooms by class'],['avail','Find a venue'],ev];
@@ -388,7 +388,7 @@ function openLend(resId,from,to,date){
 }
 function vLend(){
   var u=me(),md=myDepts(),d=deptById(u.deptId),sl=slotList(),lbl=deptLabel(md);
-  var head='<div class="head"><div><h2>Lend a venue</h2><p>When one of your department’s venues is free on a date and time, you can book it for another department, a head of department or an outside guest. It is confirmed straight away and the slot is blocked for everyone else.</p></div></div>';
+  var head='<div class="head"><div><h2>Lend my venue</h2><p>When one of your department’s venues is free, book it for an outside guest, another department or a head of department without waiting for a request. It is confirmed straight away and the slot is blocked for everyone else.</p></div></div>';
   if(!d)return head+emptyBox('No department is linked to this account. Ask the administrator to set it in Masters → Users.');
   var own=S.resources.filter(function(r){return md.indexOf(r.deptId)>-1});
   if(!own.length)return head+emptyBox(esc(lbl)+' has no venues yet. The administrator can allocate venues in Masters → Allocation.');
@@ -434,6 +434,12 @@ function reqRemarks(q){
   return '<div>'+(q.remarks?esc(q.remarks):'<span class="note">No remarks</span>')+'</div><div class="note">'+esc(q.decidedBy)+(q.decidedAt?' · '+esc(new Date(q.decidedAt).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})):'')+'</div>';
 }
 function reqVenue(q){var r=resById(q.resId);return r?'<b>'+esc(r.name)+'</b><div class="note">'+esc(r.type)+' · '+r.capacity+' seats</div>':'<span class="note">Removed venue</span>'}
+function vVenues(){
+  var pend=S.vreqs.filter(function(q){return q.status==='pending'&&q.date>=today&&myDepts().indexOf(q.ownerDeptId)>-1}).length;
+  var v=ui.vrView||(pend?'inbox':'request');
+  var nav='<div class="seg trnav" role="tablist" aria-label="Venue requests">'+[['request','Request a venue'],['inbox','Requests to decide'+(pend?' ('+pend+')':'')],['lend','Lend my venue']].map(function(x){return '<button class="btn'+(v===x[0]?' on':'')+'" role="tab" aria-selected="'+(v===x[0])+'" data-act="vrview" data-v="'+x[0]+'">'+x[1]+'</button>'}).join('')+'</div>';
+  return nav+(v==='inbox'?vInbox():v==='lend'?vLend():vBorrow());
+}
 function vBorrow(){
   var u=me(),md=myDepts(),sl=slotList();
   var head='<div class="head"><div><h2>Request a venue</h2><p>Pick a date and time, see the venues of other departments (and the central pool) that are free, and send a request. The head of the owning department approves or rejects it with remarks. Nothing is booked until it is approved.</p></div></div>';
@@ -549,42 +555,41 @@ function vTrackPlan(){
   var cellsN=5+wkend.length;
   var strip='<div class="dstrip" style="grid-template-columns:repeat('+cellsN+',minmax(0,1fr))">'+DAYS3.concat(wkend.map(function(i){return i===5?'Sat':'Sun'})).map(function(n,i){var di=i<5?i:wkend[i-5],d=addD(week,di),h=tday(cid,d);return '<div class="dcell'+(h.off?' off':' work')+'" title="'+esc(h.title)+'"><b>'+n+'</b> '+fmtShort(d)+'<span>'+esc(h.off?h.title:(h.marker||(h.entry?h.title:'Working day')))+'</span></div>'}).join('')+'</div>';
   var working=[0,1,2,3,4,5,6].filter(function(i){return !tday(cid,addD(week,i)).off}).length;
-  // month plan: one box, one column pair per week
-  var n=ids.length,mp={};
+  // month plan: one row per week, one Plan/Actual pair per load type
+  var n=ids.length;
   function wkOpen(w){var lw=lastWorking(cid,w);return !lw||today>=lw}
-  var head1='<th rowspan="2">Load type</th>'+ws.map(function(w){return '<th colspan="2" class="wkh'+(w===week?' cur':'')+'"><button class="link" data-act="trwk" data-w="'+w+'">'+fmtShort(w)+' – '+fmtShort(addD(w,4))+'</button></th>'}).join('')+'<th colspan="3" class="wkh mon">Month</th>';
-  var head2=ws.map(function(w){return '<th class="sub'+(w===week?' cur':'')+'">Plan</th><th class="sub'+(w===week?' cur':'')+'">Actual</th>'}).join('')+'<th class="sub mon">Plan</th><th class="sub mon">Actual</th><th class="sub mon">vs plan</th>';
-  var rows='',GP={},GA={},GD={},GN=0;
-  ws.forEach(function(w){GP[w]=0;GA[w]=0;GD[w]=0});var gMP=0,gMA=0,gMD=0,gMN=0;
-  LOAD_KINDS.forEach(function(kind){
-    var L=loads.filter(function(l){return l.kind===kind});if(!L.length)return;
-    var KP={},KA={},KD={},KN={};ws.forEach(function(w){KP[w]=0;KA[w]=0;KD[w]=0;KN[w]=0});var kMP=0,kMA=0,kMD=0,kMN=0;
-    rows+='<tr class="kind"><th colspan="'+(1+ws.length*2+3)+'">'+kind+' load</th></tr>';
-    L.forEach(function(l){
-      var tds='',mP=0,mA=0,mD=0,mN=0;
-      ws.forEach(function(w){
-        var cv=cellVals(ids,w,l.id),open=wkOpen(w),cur=w===week?' cur':'';
-        var psum=0,asum=0,dsum=0,anum=0;
-        ids.forEach(function(id){var r=planRow(id,w,l.id),pp=r?r.planned:0,aa=r&&r.actual!==undefined&&r.actual!==null?r.actual:null;psum+=pp;if(aa!==null){asum+=aa;dsum+=aa-pp;anum++}});
-        var pAvg=psum/n;mP+=pAvg;if(anum){mA+=asum/n;mD+=dsum/n;mN++}
-        KP[w]+=pAvg;if(anum){KA[w]+=asum/n;KD[w]+=dsum/n;KN[w]++}
-        var pc=edit?'<input class="hrs" type="number" min="0" max="100" step="0.5" inputmode="decimal" value="'+(cv.pMixed?'':(cv.p?cv.p:''))+'" placeholder="'+(cv.pMixed?'mixed':'0')+'" data-tr="'+(grp?ui.trClass:cid)+'|'+l.id+'|planned|'+w+'" aria-label="Planned hours, '+esc(l.name)+', week of '+fmtShort(w)+'">':'<span class="mono">'+(cv.pMixed?'mixed':(cv.p||'–'))+'</span>';
-        var single=!grp&&cv.a!==null,tone=anum&&!cv.pMixed&&!cv.aMixed&&cv.a!==null?(rnd1(cv.a-cv.p)===0?' ok':' bad'):'';
-        var ac=(edit&&!grp)?'<input class="hrs" type="number" min="0" max="100" step="0.5" inputmode="decimal" value="'+(cv.a===null?'':cv.a)+'" placeholder="'+(open?'hrs':'–')+'"'+(open?'':' disabled title="Opens on the last working day of this week"')+' data-tr="'+cid+'|'+l.id+'|actual|'+w+'" aria-label="Actual hours, '+esc(l.name)+', week of '+fmtShort(w)+'">':'<span class="mono">'+(cv.aMixed?'mixed':(cv.a===null?'–':cv.a))+'</span>';
-        tds+='<td class="wp'+cur+'">'+pc+'</td><td class="wa'+tone+cur+'">'+ac+(tone?'<small class="vb">'+(tone===' ok'?'✓':sgn(cv.a-cv.p))+'</small>':'')+'</td>';
-      });
-      kMP+=mP;kMA+=mA;kMD+=mD;kMN+=mN;
-      rows+='<tr><td>'+esc(l.name)+'</td>'+tds+'<td class="mono mon">'+rnd1(mP)+'</td><td class="mono mon">'+(mN?rnd1(mA):'–')+'</td>'+varCell(0,mN?rnd1(mD):null,' mon')+'</tr>';
+  var kinds=LOAD_KINDS.map(function(k){return {kind:k,L:loads.filter(function(l){return l.kind===k})}}).filter(function(g){return g.L.length});
+  var flat=[];kinds.forEach(function(g,gi){g.L.forEach(function(l,li){flat.push({l:l,gi:gi,start:li===0})})});
+  var h1='<th rowspan="3" class="wk0">Week</th>'+kinds.map(function(g,gi){return '<th colspan="'+g.L.length*2+'" class="wkh k'+(gi%2)+'">'+g.kind+' load</th>'}).join('')+'<th colspan="3" rowspan="2" class="wkh mon">Week total</th>';
+  var h2=flat.map(function(f){return '<th colspan="2" class="lh'+(f.start?' gs':'')+'">'+esc(f.l.name)+'</th>'}).join('');
+  var h3=flat.map(function(f){return '<th class="sub'+(f.start?' gs':'')+'">Plan</th><th class="sub">Actual</th>'}).join('')+'<th class="sub mon">Plan</th><th class="sub mon">Actual</th><th class="sub mon">vs plan</th>';
+  var LM={};flat.forEach(function(f){LM[f.l.id]={p:0,a:0,d:0,n:0}});
+  var gMP=0,gMA=0,gMD=0,gMN=0,rows='';
+  ws.forEach(function(w){
+    var open=wkOpen(w),isSel=w===week,cur=isSel?' cur':'',tp=0,ta=0,td=0,tn=0,tds='';
+    flat.forEach(function(f){
+      var l=f.l,cv=cellVals(ids,w,l.id),psum=0,asum=0,dsum=0,anum=0;
+      ids.forEach(function(id){var r=planRow(id,w,l.id),pp=r?r.planned:0,aa=r&&r.actual!==undefined&&r.actual!==null?r.actual:null;psum+=pp;if(aa!==null){asum+=aa;dsum+=aa-pp;anum++}});
+      var pAvg=psum/n;tp+=pAvg;LM[l.id].p+=pAvg;
+      if(anum){ta+=asum/n;td+=dsum/n;tn++;LM[l.id].a+=asum/n;LM[l.id].d+=dsum/n;LM[l.id].n++}
+      var pc=edit?'<input class="hrs" type="number" min="0" max="100" step="0.5" inputmode="decimal" value="'+(cv.pMixed?'':(cv.p?cv.p:''))+'" placeholder="'+(cv.pMixed?'mixed':'0')+'" data-tr="'+(grp?ui.trClass:cid)+'|'+l.id+'|planned|'+w+'" aria-label="Planned hours, '+esc(l.name)+', week of '+fmtShort(w)+'">':'<span class="mono">'+(cv.pMixed?'mixed':(cv.p||'–'))+'</span>';
+      var tone=anum&&!cv.pMixed&&!cv.aMixed&&cv.a!==null?(rnd1(cv.a-cv.p)===0?' ok':' bad'):'';
+      var ac=(edit&&!grp)?'<input class="hrs" type="number" min="0" max="100" step="0.5" inputmode="decimal" value="'+(cv.a===null?'':cv.a)+'" placeholder="'+(open?'hrs':'–')+'"'+(open?'':' disabled title="Opens on the last working day of this week"')+' data-tr="'+cid+'|'+l.id+'|actual|'+w+'" aria-label="Actual hours, '+esc(l.name)+', week of '+fmtShort(w)+'">':'<span class="mono">'+(cv.aMixed?'mixed':(cv.a===null?'–':cv.a))+'</span>';
+      tds+='<td class="wp'+(f.start?' gs':'')+cur+'">'+pc+'</td><td class="wa'+tone+cur+'">'+ac+(tone?'<small class="vb">'+(tone===' ok'?'✓':sgn(cv.a-cv.p))+'</small>':'')+'</td>';
     });
-    var kt='';ws.forEach(function(w){var has=KN[w]>0,tone=has?(rnd1(KD[w])===0?' ok':' bad'):'';kt+='<td class="mono wp">'+rnd1(KP[w])+'</td><td class="mono wa'+tone+'">'+(has?rnd1(KA[w]):'–')+(has?'<small class="vb">'+(tone===' ok'?'✓':sgn(KD[w]))+'</small>':'')+'</td>';GP[w]+=KP[w];GA[w]+=KA[w];GD[w]+=KD[w];if(has)GN++});
-    rows+='<tr class="sub"><td>'+kind+' total</td>'+kt+'<td class="mono mon">'+rnd1(kMP)+'</td><td class="mono mon">'+(kMN?rnd1(kMA):'–')+'</td>'+varCell(0,kMN?rnd1(kMD):null,' mon')+'</tr>';
-    gMP+=kMP;gMA+=kMA;gMD+=kMD;gMN+=kMN;
+    gMP+=tp;gMA+=ta;gMD+=td;gMN+=tn;
+    var chip=w===mondayOf(today)?'<span class="wchip now">This week</span>':addD(w,6)<today?'<span class="wchip">Past</span>':'<span class="wchip soon">Upcoming</span>';
+    var tt=tn?(rnd1(td)===0?' ok':' bad'):'';
+    rows+='<tr class="'+(isSel?'cur':'')+'"><td class="wk0"><button class="link" data-act="trwk" data-w="'+w+'">'+fmtShort(w)+' – '+fmtShort(addD(w,4))+'</button> '+chip+'</td>'+tds+
+      '<td class="mono mon">'+rnd1(tp)+'</td><td class="mono mon'+tt+'">'+(tn?rnd1(ta):'–')+'</td>'+varCell(0,tn?rnd1(td):null,' mon')+'</tr>';
   });
-  var gt='';ws.forEach(function(w){var has=false;S.wplans.forEach(function(r){if(ids.indexOf(r.classId)>-1&&r.weekStart===w&&r.actual!==undefined&&r.actual!==null)has=true});var tone=has?(rnd1(GD[w])===0?' ok':' bad'):'';gt+='<td class="mono wp">'+rnd1(GP[w])+'</td><td class="mono wa'+tone+'">'+(has?rnd1(GA[w]):'–')+(has?'<small class="vb">'+(tone===' ok'?'✓':sgn(GD[w]))+'</small>':'')+'</td>'});
-  rows+='<tr class="grand"><td>All load types</td>'+gt+'<td class="mono mon">'+rnd1(gMP)+'</td><td class="mono mon">'+(gMN?rnd1(gMA):'–')+'</td>'+varCell(0,gMN?rnd1(gMD):null,' mon')+'</tr>';
+  var mt='',mv='';
+  flat.forEach(function(f){var m=LM[f.l.id];mt+='<td class="mono'+(f.start?' gs':'')+'">'+rnd1(m.p)+'</td><td class="mono">'+(m.n?rnd1(m.a):'–')+'</td>';mv+=varCell(0,m.n?rnd1(m.d):null,f.start?' gs':'').replace('<td','<td colspan="2"')});
+  rows+='<tr class="grand"><td class="wk0">Month total</td>'+mt+'<td class="mono mon">'+rnd1(gMP)+'</td><td class="mono mon">'+(gMN?rnd1(gMA):'–')+'</td>'+varCell(0,gMN?rnd1(gMD):null,' mon')+'</tr>';
+  rows+='<tr class="sub"><td class="wk0">Month vs plan</td>'+mv+'<td colspan="3" class="mon"></td></tr>';
   var lw=lastWorking(cid,week),open=wkOpen(week);
   var note=grp?'Figures are the average per section. Hours you type under Plan are applied to every section in this group. Pick a single section to enter actual hours.':(edit?(open?'Enter what was actually completed in the week that has ended or is ending.':'Planned hours can be entered any time. Actual hours open on the last working day of each week.'):'You can view this plan. Only the department head or an administrator can change it.');
-  var table='<div class="scroll"><table class="tbl trtbl trmonth"><thead><tr>'+head1+'</tr><tr>'+head2+'</tr></thead><tbody>'+rows+'</tbody></table></div><p class="note" style="margin:6px 0 0">'+note+' Green means the target was met exactly. Red shows how many hours over (+) or under (−) the plan.</p>';
+  var table='<div class="scroll"><table class="tbl trtbl trmonth trwk"><thead><tr>'+h1+'</tr><tr>'+h2+'</tr><tr>'+h3+'</tr></thead><tbody>'+rows+'</tbody></table></div><p class="note" style="margin:6px 0 0">'+note+' Green means the target was met exactly. Red shows how many hours over (+) or under (−) the plan. Click a week to see its days above.</p>';
   var sum=cls.map(function(c){
     var t=weekTotals(c.id,week),cu=cumulative(c.id);
     return '<tr'+(ids.indexOf(c.id)>-1?' class="cur"':'')+'><td><button class="link" data-act="trclass" data-id="'+c.id+'"><b>Year '+c.year+' · '+esc(c.section)+'</b></button></td><td class="mono">'+t.planned+'</td><td class="mono">'+(t.entered?t.actual:'–')+'</td>'+varCell(0,t.entered?t.diff:null)+varCell(0,cu.entered?cu.diff:null)+'</tr>';
@@ -1004,7 +1009,7 @@ function render(){
   head.innerHTML='<div class="bar">'+brand+
     '<div class="who"><span id="sync" class="syncwrap"></span><span class="me" title="'+esc(u.email)+'"><b>'+esc(u.name)+'</b> · '+ROLE[u.role]+'</span><button class="btn sm" data-act="logout">Sign out</button><button class="btn sm" data-act="logoutall" title="Sign out on every device where you are signed in">Sign out everywhere</button></div></div>'+
     '<nav class="tabs" role="tablist" aria-label="Sections">'+tabs.map(function(t){return '<button class="tab" role="tab" aria-selected="'+(t[0]===ui.tab)+'" data-act="tab" data-v="'+t[0]+'">'+t[1]+'</button>'}).join('')+'</nav>';
-  document.getElementById('main').innerHTML={dash:function(){return '<div class="head"><div><h2>Available venues</h2><p>See which venues are free on a day and time.</p></div></div>'+vDashAvail()},overview:vOverview,avail:vAvail,events:vEvents,lend:vLend,borrow:vBorrow,inbox:vInbox,track:vTrack,timetable:vTimetable,classes:vClasses,changes:vChanges,masters:vMasters}[ui.tab]();
+  document.getElementById('main').innerHTML={dash:function(){return '<div class="head"><div><h2>Available venues</h2><p>See which venues are free on a day and time.</p></div></div>'+vDashAvail()},overview:vOverview,avail:vAvail,events:vEvents,venues:vVenues,inbox:vInbox,track:vTrack,timetable:vTimetable,classes:vClasses,changes:vChanges,masters:vMasters}[ui.tab]();
   document.getElementById('modalRoot').innerHTML=modalHTML();
   document.getElementById('foot').innerHTML='<span>Signed in as '+esc(u.email||u.name)+'</span>';
   updateSync();
@@ -1289,6 +1294,7 @@ document.addEventListener('click',function(e){
     case 'lunch':{var ldd=deptById(d.id);if(ldd)open('lunch',{id:ldd.id,lunch:(ldd.lunchSlots||[]).slice()});return}
     case 'addbreak':{var eb=S.slots.filter(function(x){return x.isBreak})[0];open('slot',eb?Object.assign({},eb):{label:'Lunch',start:'13:15',end:'14:00',isBreak:true});return}
     case 'fullday':{var fl=slotOpts();open('fullday',{resId:ui.ttMode==='week'?ui.ttRes:'',days:[ui.ttDay],from:fl.length?fl[0][0]:'',to:fl.length?fl[fl.length-1][0]:'',title:'',faculty:'',classId:ui.lastClass||''});return}
+    case 'vrview':ui.vrView=d.v;window.scrollTo(0,0);break;
     case 'trview':ui.trView=d.v;window.scrollTo(0,0);break;
     case 'rpcsv':rpCsv();return;
     case 'rpprint':window.print();return;
