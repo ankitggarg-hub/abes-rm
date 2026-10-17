@@ -202,3 +202,12 @@ CREATE TABLE IF NOT EXISTS venue_requests (
 );
 CREATE INDEX IF NOT EXISTS venue_requests_owner ON venue_requests (owner_dept_id, status);
 CREATE INDEX IF NOT EXISTS venue_requests_res_date ON venue_requests (res_id, date);
+
+-- Venue requests, part 2: year/section, release after approval, and alert flags (safe to re-run)
+ALTER TABLE venue_requests ADD COLUMN IF NOT EXISTS class_id        text REFERENCES classes(id) ON DELETE SET NULL;
+ALTER TABLE venue_requests ADD COLUMN IF NOT EXISTS release_note    text NOT NULL DEFAULT '';
+ALTER TABLE venue_requests ADD COLUMN IF NOT EXISTS released_at     text NOT NULL DEFAULT '';
+ALTER TABLE venue_requests ADD COLUMN IF NOT EXISTS owner_seen      boolean NOT NULL DEFAULT false;
+ALTER TABLE venue_requests ADD COLUMN IF NOT EXISTS requester_seen  boolean NOT NULL DEFAULT true;
+ALTER TABLE venue_requests DROP CONSTRAINT IF EXISTS venue_requests_status_check;
+ALTER TABLE venue_requests ADD CONSTRAINT venue_requests_status_check CHECK (status IN ('pending','approved','rejected','cancelled','released'));

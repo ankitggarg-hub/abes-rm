@@ -6,7 +6,7 @@ let app, cse, ece, admin, stake;
 const put = (cookie, key, body) => app.call('PUT', '/api/data/' + key, { cookie, body });
 const data = async (c) => (await app.call('GET', '/api/data', { cookie: c })).body.data;
 const venue = async (dept) => (await app.db.query(`SELECT id FROM venues WHERE dept_id = $1 ORDER BY id LIMIT 1`, [dept]))[0].id;
-let FREE = [];
+let FREE = [], CLS, ECLS;
 const DATE = '2026-12-17'; // a Thursday, in the future of the demo data
 
 test('setup', async () => {
@@ -17,13 +17,15 @@ test('setup', async () => {
   ece = await app.login(by('hod', 'd_ece').email);
   admin = await app.login(by('admin').email);
   stake = await app.login(by('stakeholder').email);
+  CLS = (await app.db.query(`SELECT id FROM classes WHERE dept_id = 'd_cse' ORDER BY id LIMIT 1`))[0].id;
+  ECLS = (await app.db.query(`SELECT id FROM classes WHERE dept_id = 'd_ece' ORDER BY id LIMIT 1`))[0].id;
   const res = await venue('d_ece');
   const busy = (await app.db.query(`SELECT slot_id FROM timetable WHERE res_id = $1 AND day = 3`, [res])).map((r) => r.slot_id);
   const slots = await app.db.query(`SELECT id FROM slots WHERE NOT is_break ORDER BY start_time`);
   FREE = slots.map((s) => s.id).filter((id) => !busy.includes(id));
 });
 
-const mk = (id, resId, over = {}) => ({ id, resId, date: DATE, slotIds: [FREE[0]], title: 'Guest lecture', attendees: 40, reason: 'Our rooms are full', fromDeptId: 'd_cse', status: 'pending', ...over });
+const mk = (id, resId, over = {}) => ({ id, resId, date: DATE, slotIds: [FREE[0]], title: 'Guest lecture', attendees: 40, reason: 'Our rooms are full', fromDeptId: 'd_cse', classId: CLS, status: 'pending', ...over });
 
 test('a head requests another department venue; only the owner sees it and decides', async () => {
   const res = await venue('d_ece');
@@ -78,4 +80,40 @@ test('the administrator decides requests for central venues', async () => {
   const row = (await data(admin)).vreqs.find((x) => x.id === 'rq8');
   assert.equal((await put(ece, 'vreqs', { upsert: [{ ...row, status: 'approved' }] })).status, 403);
   assert.equal((await put(admin, 'vreqs', { upsert: [{ ...row, status: 'approved' }] })).status, 200);
+});
+
+test('year/section is required and must be your own', async () => {
+  const res = await venue('d_ece');
+  assert.equal((await put(cse, 'vreqs', { upsert: [mk('rc1', res, { slotIds: [FREE[5] || FREE[4]], classId: null })] })).status, 403);
+  assert.equal((await put(cse, 'vreqs', { upsert: [mk('rc2', res, { slotIds: [FREE[5] || FREE[4]], classId: ECLS })] })).status, 403);
+});
+
+test('alerts: owner is alerted, requester releases an approved request, venue is free again', async () => {
+  const res = await venue('d_ece'), slot = FREE[4];
+  assert.equal((await put(cse, 'vreqs', { upsert: [mk('rl1', res, { slotIds: [slot], date: '2026-12-18' })] })).status, 200);
+  let row = (await data(ece)).vreqs.find((x) => x.id === 'rl1');
+  assert.equal(row.ownerSeen, false);
+  assert.equal(row.classId, CLS);
+  // owner cannot release; requester cannot dismiss owner alert
+  assert.equal((await put(ece, 'vreqs', { upsert: [{ ...row, status: 'approved', remarks: 'ok' }] })).status, 200);
+  row = (await data(cse)).vreqs.find((x) => x.id === 'rl1');
+  assert.equal(row.requesterSeen, false);
+  assert.ok((await data(cse)).events.some((e) => e.id === row.eventId && e.title.includes('(CSE')));
+  assert.equal((await put(ece, 'vreqs', { upsert: [{ ...row, status: 'released', releaseNote: 'x' }] })).status, 403);
+  assert.equal((await put(ece, 'vreqs', { upsert: [{ ...row, requesterSeen: true }] })).status, 403);
+  assert.equal((await put(cse, 'vreqs', { upsert: [{ ...row, requesterSeen: true }] })).status, 200);
+  assert.equal((await put(cse, 'vreqs', { upsert: [{ ...row, requesterSeen: true, status: 'released', releaseNote: ' ' }] })).status, 400);
+  const rel = await put(cse, 'vreqs', { upsert: [{ ...row, requesterSeen: true, status: 'released', releaseNote: 'Programme changed' }] });
+  assert.equal(rel.status, 200, JSON.stringify(rel.body));
+  const d = await data(ece);
+  const after = d.vreqs.find((x) => x.id === 'rl1');
+  assert.equal(after.status, 'released');
+  assert.equal(after.ownerSeen, false);
+  assert.equal(after.releaseNote, 'Programme changed');
+  assert.equal(d.events.some((e) => e.id === row.eventId), false);
+  // the owner dismisses the alert; a released request is final
+  assert.equal((await put(ece, 'vreqs', { upsert: [{ ...after, ownerSeen: true }] })).status, 200);
+  assert.equal((await put(cse, 'vreqs', { upsert: [{ ...after, status: 'cancelled' }] })).status, 409);
+  // the slot can be requested again
+  assert.equal((await put(cse, 'vreqs', { upsert: [mk('rl2', res, { slotIds: [slot], date: '2026-12-18' })] })).status, 200);
 });
