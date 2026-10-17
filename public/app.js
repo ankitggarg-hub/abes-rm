@@ -281,13 +281,6 @@ function autoFreed(){
     S.tt.forEach(function(t){if(t.day!==w-1||relRow(t.id,dd))return;var a=offAway(t,dd);if(a&&!a.weekend)out.push({r:{date:dd,reason:a.reason,note:'off day'},t:t})})}
   return out;
 }
-function freedPanel(){
-  var list0=S.releases.filter(function(r){return r.date>=today&&r.date<=addDays(today,6)}).map(function(r){var t=S.tt.filter(function(x){return x.id===r.ttId})[0];return t?{r:r,t:t}:null}).filter(Boolean).sort(function(a,b){return a.r.date.localeCompare(b.r.date)||(slotById(a.t.slotId)||{start:''}).start.localeCompare((slotById(b.t.slotId)||{start:''}).start)});
-  var list=list0.concat(autoFreed()).sort(freedCmp);
-  var rows=list.slice(0,10).map(function(x){var v=resById(x.t.resId),s=slotById(x.t.slotId);return '<li><span><b>'+esc(v?v.name:'Removed venue')+'</b> <span class="mono">'+(s?s.start+'–'+s.end:'')+'</span><br><span class="note">'+fmtDate(x.r.date)+' · '+esc(classLabel(x.t.classId))+' away: '+esc(x.r.reason)+(x.r.note?' ('+esc(x.r.note)+')':'')+'</span></span><span class="badge b-ok">Free</span></li>'}).join('');
-  return '<section class="panel"><h3>Spaces freed by class changes and off days (next 7 days)</h3>'+(list.length?'<ul class="list">'+rows+'</ul>'+(list.length>10?'<p class="note" style="margin:8px 0 0">+'+(list.length-10)+' more. Check Availability for a given day.</p>':''):'<p class="note" style="margin:0">No scheduled class is released. When a class goes on a visit or to another activity, its venue shows up here as free.</p>')+'</section>';
-}
-
 function chTargets(){
   var u=me(),dept=u.role==='hod'?hodDept(ui.chDept):ui.chDept,out=[];
   if(!dept||!ui.chFrom||!ui.chTo||ui.chTo<ui.chFrom)return out;
