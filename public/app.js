@@ -127,7 +127,36 @@ var canApprove=function(){return ['admin','head'].indexOf(me().role)>-1};
 function slotRange(a,b){var l=slotList(),i=l.map(function(s){return s.id}).indexOf(a),j=l.map(function(s){return s.id}).indexOf(b);if(i<0)i=0;if(j<0)j=l.length-1;if(i>j){var t=i;i=j;j=t}return l.slice(i,j+1).filter(function(x){return !x.isBreak})}
 function timeRange(ids){var l=slotList().filter(function(s){return ids.indexOf(s.id)>-1});return l.length?l[0].start+'–'+l[l.length-1].end:''}
 var REASONS=['Industrial visit','Placement activity','Seminar or workshop','Exam or test','Holiday','Faculty on leave','Other'];
-function relFor(ttId,date){for(var i=0;i<S.releases.length;i++){var r=S.releases[i];if(r.ttId===ttId&&r.date===date)return r}return null}
+function relRow(ttId,date){for(var i=0;i<S.releases.length;i++){var r=S.releases[i];if(r.ttId===ttId&&r.date===date)return r}return null}
+// A class is "away" when it was released one day, or when an off day (weekend, holiday, part-day) stops it.
+function offAway(t,date){
+  var di=dayInfo(t.classId,date);
+  if(di.off)return {reason:di.weekend?di.title+' (off day)':di.title,note:'',auto:true,weekend:!!di.weekend};
+  var sl=slotList().map(function(x){return x.id}),at=sl.indexOf(t.slotId);
+  for(var i=0;i<S.holidays.length;i++){var h=S.holidays[i];
+    if(h.kind==='working'||!h.slotFrom||h.dateFrom>date||h.dateTo<date||(h.classId&&h.classId!==t.classId))continue;
+    if(at>=sl.indexOf(h.slotFrom)&&at<=sl.indexOf(h.slotTo))return {reason:h.title,note:'',auto:true,weekend:false}}
+  return null;
+}
+function relFor(ttId,date){var r=relRow(ttId,date);if(r)return r;var t=S.tt.filter(function(x){return x.id===ttId})[0];return t?offAway(t,date):null}
+// Saturdays and Sundays are closed for venue use until the administrator converts them to a working day.
+function isClosed(date){var w=dow(date);if(w!==0&&w!==6)return false;return !S.holidays.some(function(h){return !h.classId&&h.kind==='working'&&!h.slotFrom&&h.dateFrom<=date&&date<=h.dateTo})}
+function busyWhy(b,date){return b.kind==='class'?'class: '+b.e.title:b.kind==='event'?'event: '+b.ev.title:fmtDate(date)+' is an off day. Ask the administrator to convert it to a working day'}
+function holPeriods(h){if(!h.slotFrom)return '';var a=slotById(h.slotFrom),b=slotById(h.slotTo);return (a?a.label:'')+(h.slotTo&&h.slotTo!==h.slotFrom?'–'+(b?b.label:''):'')}
+function tday(classId,date){
+  var b=dayInfo(classId,date);if(b.off)return b;
+  var w=dow(date);
+  if(w>=1){
+    var sched=S.tt.filter(function(t){return t.classId===classId&&t.day===w-1});
+    if(sched.length){
+      var rels=sched.map(function(t){return relRow(t.id,date)}).filter(Boolean);
+      if(rels.length===sched.length)return {off:true,title:'Class change · '+rels[0].reason,cc:true};
+      if(rels.length)return Object.assign({},b,{marker:'Part day · '+rels[0].reason});
+    }
+  }
+  var part=S.holidays.filter(function(h){return h.slotFrom&&h.kind!=='working'&&h.dateFrom<=date&&date<=h.dateTo&&(!h.classId||h.classId===classId)})[0];
+  return part?Object.assign({},b,{marker:'Part day · '+part.title+' ('+holPeriods(part)+')'}):b;
+}
 function awayAt(resId,date,slotId){
   var d=dow(date);if(d<1)return null;
   for(var i=0;i<S.tt.length;i++){var t=S.tt[i];if(t.resId===resId&&t.day===d-1&&t.slotId===slotId){var rl=relFor(t.id,date);if(rl)return {t:t,rel:rl}}}
@@ -142,6 +171,7 @@ function busyAt(resId,date,slotId){
   var d=dow(date),i;
   if(d>=1&&d<=6){for(i=0;i<S.tt.length;i++){var t=S.tt[i];if(t.resId===resId&&t.day===d-1&&t.slotId===slotId){if(relFor(t.id,date))continue;return {kind:'class',e:t}}}}
   for(i=0;i<S.events.length;i++){var v=S.events[i];if(v.resId===resId&&v.date===date&&v.status!=='rejected'&&v.slotIds.indexOf(slotId)>-1)return {kind:'event',ev:v}}
+  if(isClosed(date))return {kind:'closed'};
   return null;
 }
 function ensure(){
@@ -210,10 +240,18 @@ function vOverview(){
   freedPanel()+lentToPanel()+'<section class="panel"><h3>Weekly timetable load by department</h3>'+(S.depts.length?'<div class="ub">'+bars+'</div>':emptyBox('Add departments in Masters.'))+'<p class="note" style="margin-bottom:0">Share of the '+perWeek+' weekly slots per venue that have a class scheduled.</p></section>';
 }
 
+function freedCmp(a,b){return a.r.date.localeCompare(b.r.date)||(slotById(a.t.slotId)||{start:''}).start.localeCompare((slotById(b.t.slotId)||{start:''}).start)}
+function autoFreed(){
+  var out=[];
+  for(var k=0;k<7;k++){var dd=addDays(today,k),w=dow(dd);if(w<1)continue;
+    S.tt.forEach(function(t){if(t.day!==w-1||relRow(t.id,dd))return;var a=offAway(t,dd);if(a&&!a.weekend)out.push({r:{date:dd,reason:a.reason,note:'off day'},t:t})})}
+  return out;
+}
 function freedPanel(){
-  var list=S.releases.filter(function(r){return r.date>=today&&r.date<=addDays(today,6)}).map(function(r){var t=S.tt.filter(function(x){return x.id===r.ttId})[0];return t?{r:r,t:t}:null}).filter(Boolean).sort(function(a,b){return a.r.date.localeCompare(b.r.date)||(slotById(a.t.slotId)||{start:''}).start.localeCompare((slotById(b.t.slotId)||{start:''}).start)});
+  var list0=S.releases.filter(function(r){return r.date>=today&&r.date<=addDays(today,6)}).map(function(r){var t=S.tt.filter(function(x){return x.id===r.ttId})[0];return t?{r:r,t:t}:null}).filter(Boolean).sort(function(a,b){return a.r.date.localeCompare(b.r.date)||(slotById(a.t.slotId)||{start:''}).start.localeCompare((slotById(b.t.slotId)||{start:''}).start)});
+  var list=list0.concat(autoFreed()).sort(freedCmp);
   var rows=list.slice(0,10).map(function(x){var v=resById(x.t.resId),s=slotById(x.t.slotId);return '<li><span><b>'+esc(v?v.name:'Removed venue')+'</b> <span class="mono">'+(s?s.start+'–'+s.end:'')+'</span><br><span class="note">'+fmtDate(x.r.date)+' · '+esc(classLabel(x.t.classId))+' away: '+esc(x.r.reason)+(x.r.note?' ('+esc(x.r.note)+')':'')+'</span></span><span class="badge b-ok">Free</span></li>'}).join('');
-  return '<section class="panel"><h3>Spaces freed by class changes (next 7 days)</h3>'+(list.length?'<ul class="list">'+rows+'</ul>'+(list.length>10?'<p class="note" style="margin:8px 0 0">+'+(list.length-10)+' more. Check Availability for a given day.</p>':''):'<p class="note" style="margin:0">No scheduled class is released. When a class goes on a visit or to another activity, its venue shows up here as free.</p>')+'</section>';
+  return '<section class="panel"><h3>Spaces freed by class changes and off days (next 7 days)</h3>'+(list.length?'<ul class="list">'+rows+'</ul>'+(list.length>10?'<p class="note" style="margin:8px 0 0">+'+(list.length-10)+' more. Check Availability for a given day.</p>':''):'<p class="note" style="margin:0">No scheduled class is released. When a class goes on a visit or to another activity, its venue shows up here as free.</p>')+'</section>';
 }
 
 function chTargets(){
@@ -257,7 +295,7 @@ function vChanges(){
   var rows=up.map(function(x){var v=resById(x.t.resId),s=slotById(x.t.slotId);
     return '<tr><td class="mono" style="white-space:nowrap">'+fmtDate(x.r.date)+'</td><td class="mono" style="white-space:nowrap">'+(s?s.start+'–'+s.end:'')+'</td><td>'+(v?tcode(v.type)+esc(v.name):'Removed venue')+'</td><td>'+esc(classLabel(x.t.classId))+'<br><span class="note">'+esc(x.t.title)+'</span></td><td><b>'+esc(x.r.reason)+'</b>'+(x.r.note?'<br><span class="note">'+esc(x.r.note)+'</span>':'')+'</td><td class="note">'+esc(x.r.by)+'</td><td class="act">'+(canRelease(x.t)?'<button class="btn sm" data-act="unrel" data-id="'+x.r.id+'">Restore class</button>':'')+'</td></tr>'}).join('');
   var list='<section><h3 style="margin-bottom:10px">Upcoming released classes</h3>'+(up.length?'<div class="scroll"><table class="tbl"><thead><tr><th>Date</th><th>Time</th><th>Venue freed</th><th>Class</th><th>Reason</th><th>Released by</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>':emptyBox('Nothing is released yet.'))+'</section>';
-  return '<div class="head"><div><h2>Class changes</h2><p>Mark classes that will not use their regular room on a given date so the space can be reused.</p></div></div>'+f+list;
+  return '<div class="head"><div><h2>Class changes</h2><p>Mark classes that will not use their regular room on a given date so the space can be reused. If every class of a section is released on a day, that day also shows as an off day in the Academic tracker calendar.</p></div></div>'+f+list;
 }
 
 function vAvail(){
@@ -288,12 +326,13 @@ function vAvail(){
       if(s.isBreak)return '<td><div class="cell brk">Break</div></td>';
       var b=busyAt(r.id,date,s.id);
       if(!b){var aw=awayAt(r.id,date,s.id);return '<td><'+(canBook()?'button data-act="book" data-res="'+r.id+'" data-from="'+s.id+'" data-to="'+s.id+'" class="cell free vfree pick'+(aw?' rel':'')+'" title="Book '+esc(r.name)+' at '+s.start+(aw?' (class away: '+esc(classLabel(aw.t.classId)+', '+aw.rel.reason)+')':'')+'"':'div class="cell free vfree'+(aw?' rel':'')+'"'+(aw?' title="'+esc('Class away: '+classLabel(aw.t.classId)+', '+aw.rel.reason)+'"':''))+'><i>Free</i>'+(aw?'<em>'+esc(classLabel(aw.t.classId))+' away</em>':'')+'</'+(canBook()?'button':'div')+'></td>'}
+      if(b.kind==='closed')return '<td><div class="cell brk" title="Off day: venues open once it is converted to a working day">Off day</div></td>';
       if(b.kind==='class'){var d=deptById(r.deptId);return '<td><div class="cell cls" style="--h:'+(d?d.h:200)+'" title="'+esc(b.e.title+(b.e.faculty?' · '+b.e.faculty:''))+'"><b>'+esc(b.e.title)+'</b><span>'+esc(classLabel(b.e.classId))+'</span></div></td>'}
       return '<td><div class="cell ev"><b>'+esc(b.ev.title)+'</b><span>'+(b.ev.status==='pending'?'Requested':'Event')+'</span></div></td>';
     }).join('')+'</tr>';
   }).join('');
   return '<div class="head"><div><h2>'+(me().role==='hod'||me().role==='admin'?'Availability':'Find a venue')+'</h2><p>Pick a date and a window of periods. Free means no class in the weekly timetable and no event booked.</p></div></div>'+filters+
-    '<section><h3 style="margin-bottom:10px">'+free.length+' free from '+first.start+' to '+last.end+' on '+fmtDate(date)+'</h3>'+(dow(date)===0?'<p class="note">Sunday: no timetable applies.</p>':'')+cards+'</section>'+
+    '<section><h3 style="margin-bottom:10px">'+free.length+' free from '+first.start+' to '+last.end+' on '+fmtDate(date)+'</h3>'+(isClosed(date)?'<p class="note">'+fmtDate(date)+' is an off day, so venues are closed. The administrator can convert it to a working day in the Academic tracker calendar.</p>':'')+cards+'</section>'+
     '<section><div class="head" style="margin-bottom:8px"><h3>Day view</h3>'+legend+'</div>'+(rs.length?'<div class="scroll"><table class="grid"><thead>'+head+'</thead><tbody>'+body+'</tbody></table></div>':emptyBox('No venue matches these filters.'))+'</section>';
 }
 
@@ -362,7 +401,7 @@ var rnd1=function(n){return Math.round(n*10)/10};
 function loadList(){return S.loads.slice().sort(function(a,b){return LOAD_KINDS.indexOf(a.kind)-LOAD_KINDS.indexOf(b.kind)||a.name.localeCompare(b.name)})}
 // Saturday and Sunday are off unless converted to a working day. A section's own entry beats a campus-wide one; 'working' beats 'off' at the same level.
 function dayInfo(classId,date){
-  var cover=S.holidays.filter(function(h){return h.dateFrom<=date&&date<=h.dateTo&&(!h.classId||h.classId===classId)});
+  var cover=S.holidays.filter(function(h){return !h.slotFrom&&h.dateFrom<=date&&date<=h.dateTo&&(!h.classId||h.classId===classId)});
   for(var lv=0;lv<2;lv++){
     var L=cover.filter(function(h){return lv===0?!!h.classId:!h.classId});
     var w=L.filter(function(h){return h.kind==='working'})[0];if(w)return {off:false,title:w.title,entry:w,own:lv===0};
@@ -372,7 +411,7 @@ function dayInfo(classId,date){
   return wd===0||wd===6?{off:true,title:wd===0?'Sunday':'Saturday',weekend:true}:{off:false,title:'Working day'};
 }
 function offFor(classId,date){var i=dayInfo(classId,date);return i.off?i:null}
-function lastWorking(classId,week){for(var i=6;i>=0;i--){var d=addD(week,i);if(!dayInfo(classId,d).off)return d}return null}
+function lastWorking(classId,week){for(var i=6;i>=0;i--){var d=addD(week,i);if(!tday(classId,d).off)return d}return null}
 function planRow(classId,week,loadId){for(var i=0;i<S.wplans.length;i++){var r=S.wplans[i];if(r.classId===classId&&r.weekStart===week&&r.loadId===loadId)return r}return null}
 function canEditTrack(classId){var u=me();if(u.role==='admin')return true;if(u.role!=='hod')return false;var c=classById(classId);return !!c&&myDepts().indexOf(c.deptId)>-1}
 function sgn(n){return (n>0?'+':'−')+Math.abs(rnd1(n))}
@@ -406,10 +445,10 @@ function vTrackPlan(){
   var ws=weeksOfMonth(ui.trMonth);
   if(ws.indexOf(ui.trWeek)<0)ui.trWeek=ws.indexOf(mondayOf(today))>-1?mondayOf(today):ws[0];
   var week=ui.trWeek,ids=trIds(ui.trClass),grp=trIsGroup(ui.trClass),cid=ids[0],glabel=grp?trGroupLabel(ui.trClass):classLabel(cid),edit=ids.every(canEditTrack);
-  var wkend=[5,6].filter(function(i){return !dayInfo(cid,addD(week,i)).off});
+  var wkend=[5,6].filter(function(i){return !tday(cid,addD(week,i)).off});
   var cellsN=5+wkend.length;
-  var strip='<div class="dstrip" style="grid-template-columns:repeat('+cellsN+',minmax(0,1fr))">'+DAYS3.concat(wkend.map(function(i){return i===5?'Sat':'Sun'})).map(function(n,i){var di=i<5?i:wkend[i-5],d=addD(week,di),h=dayInfo(cid,d);return '<div class="dcell'+(h.off?' off':' work')+'" title="'+esc(h.title)+'"><b>'+n+'</b> '+fmtShort(d)+'<span>'+esc(h.off?h.title:(h.entry?h.title:'Working day'))+'</span></div>'}).join('')+'</div>';
-  var working=[0,1,2,3,4,5,6].filter(function(i){return !dayInfo(cid,addD(week,i)).off}).length;
+  var strip='<div class="dstrip" style="grid-template-columns:repeat('+cellsN+',minmax(0,1fr))">'+DAYS3.concat(wkend.map(function(i){return i===5?'Sat':'Sun'})).map(function(n,i){var di=i<5?i:wkend[i-5],d=addD(week,di),h=tday(cid,d);return '<div class="dcell'+(h.off?' off':' work')+'" title="'+esc(h.title)+'"><b>'+n+'</b> '+fmtShort(d)+'<span>'+esc(h.off?h.title:(h.marker||(h.entry?h.title:'Working day')))+'</span></div>'}).join('')+'</div>';
+  var working=[0,1,2,3,4,5,6].filter(function(i){return !tday(cid,addD(week,i)).off}).length;
   // month plan: one box, one column pair per week
   var n=ids.length,mp={};
   function wkOpen(w){var lw=lastWorking(cid,w);return !lw||today>=lw}
@@ -548,18 +587,18 @@ function rpCsv(){
   tClassesOf(d.id).forEach(function(c){var t=trStats([c.id],W,K,idx);out.push([d.code,c.year,c.section,rnd1(t.planned),t.pp?rnd1(t.actual):'',t.pp?rnd1(t.diff):'',t.adh===null?'':Math.round(t.adh*100),t.reported,t.closed].map(q).join(','))});
   var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([out.join('\n')],{type:'text/csv'}));a.download='academic-progress-'+d.code+'-'+ui.rpPeriod+'.csv';document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},500);
 }
-function kindTag(h){return h.kind==='working'?'<span class="dtag work">Working day</span>':'<span class="dtag">Off day</span>'}
+function kindTag(h){return h.kind==='working'?'<span class="dtag work">Working day</span>':(h.slotFrom?'<span class="dtag">Part day</span> <span class="note">'+esc(holPeriods(h))+'</span>':'<span class="dtag">Off day</span>')}
 function trCalendar(cid,canMark,lab){
   var m=ui.trMonth,first=m+'-01',start=mondayOf(first),y=+m.slice(0,4),mo=+m.slice(5,7),last=new Date(Date.UTC(y,mo,0)).toISOString().slice(0,10);
   var title=new Date(first+'T00:00:00Z').toLocaleDateString('en-IN',{month:'long',year:'numeric',timeZone:'UTC'});
   var cells='',d=start;
   while(d<=last||new Date(d+'T00:00:00Z').getUTCDay()!==1){
-    var inM=d.slice(0,7)===m,i=dayInfo(cid,d),cls2='cal '+(i.off?(i.weekend?'weekend':(i.own?'off own':'off')):(i.entry?'wk':'work'))+(inM?'':' out')+(d===today?' today':''),lab=i.weekend?'':i.title;
+    var inM=d.slice(0,7)===m,i=tday(cid,d),cls2='cal '+(i.off?(i.weekend?'weekend':(i.cc?'cc':(i.own?'off own':'off'))):(i.entry?'wk':(i.marker?'work part':'work')))+(inM?'':' out')+(d===today?' today':''),lab=i.marker||(i.weekend?'':i.title);
     cells+='<'+(canMark&&inM?'button':'div')+' class="'+cls2+'"'+(canMark&&inM?' data-act="calday" data-d="'+d+'" data-off="'+(i.off?1:0)+'"':'')+' title="'+esc(i.title)+'"><b>'+(+d.slice(8))+'</b><span>'+esc(lab)+'</span></'+(canMark&&inM?'button':'div')+'>';
     d=addD(d,1);if(d>last&&new Date(d+'T00:00:00Z').getUTCDay()===1)break;
   }
   var hd=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(function(n){return '<div class="calh">'+n+'</div>'}).join('');
-  return '<div class="calbox"><div class="rowhead"><b>'+title+' · '+esc(lab||classLabel(cid))+'</b><span class="seg"><button class="btn sm" data-act="trmonth" data-n="-1">Previous</button><button class="btn sm" data-act="trmonth" data-n="0">This month</button><button class="btn sm" data-act="trmonth" data-n="1">Next</button></span></div><div class="calgrid">'+hd+cells+'</div><p class="note" style="margin:6px 0 0"><span class="lg work"></span>Working <span class="lg off"></span>Off day <span class="lg weekend"></span>Weekend <span class="lg wk"></span>Converted to working'+(canMark?'. Click a date to mark it off, or to make an off day a working day.':'.')+'</p></div>';
+  return '<div class="calbox"><div class="rowhead"><b>'+title+' · '+esc(lab||classLabel(cid))+'</b><span class="seg"><button class="btn sm" data-act="trmonth" data-n="-1">Previous</button><button class="btn sm" data-act="trmonth" data-n="0">This month</button><button class="btn sm" data-act="trmonth" data-n="1">Next</button></span></div><div class="calgrid">'+hd+cells+'</div><p class="note" style="margin:6px 0 0"><span class="lg work"></span>Working <span class="lg off"></span>Off day <span class="lg weekend"></span>Weekend <span class="lg wk"></span>Converted to working <span class="lg cc"></span>Class change <span class="lg part"></span>Part day'+(canMark?'. Click a date to mark it off, or to make an off day a working day.':'.')+'</p></div>';
 }
 function trIsGroup(sel){return sel==='ALL'||(typeof sel==='string'&&sel.indexOf('Y:')===0)}
 function trIds(sel){var cl=tClassesOf(ui.trDept);if(sel==='ALL')return cl.map(function(c){return c.id});if(trIsGroup(sel)){var y=+sel.slice(2);return cl.filter(function(c){return c.year===y}).map(function(c){return c.id})}return [sel]}
@@ -804,7 +843,7 @@ function modalHTML(){
       body=fld('Name',tin('name',v.name,'required maxlength="60" placeholder="Theory lectures"'))+fld('Kind',sel('kind',LOAD_KINDS.map(function(k){return [k,k]}),v.kind||'Academic'));break;
     case 'offday':title=(v.id?'Edit':'Mark')+' off day';
       extra='<p class="ctx">'+(me().role==='admin'?'Choose “All departments” for a central holiday, or one year and section.':'The off day applies to the years and sections you choose.')+' Use the last day to cover more than one day. Saturdays and Sundays are already off; choose Working day to override that.</p>';
-      body=fld('Title',tin('title',v.title,'required maxlength="120" placeholder="Gandhi Jayanti"'))+'<div class="frow">'+fld('First day',tin('dateFrom',v.dateFrom||today,'type="date" required'))+fld('Last day',tin('dateTo',v.dateTo||v.dateFrom||today,'type="date" required'))+'</div>'+fld('This is',sel('kind',[['off','Off day (no classes)'],['working','Working day (turn an off day into a working day)']],v.kind||'off'))+fld('Applies to',scopeHTML(v.scope!==undefined?v.scope:(v.classId||(me().role==='admin'?'':'D:'+ui.trDept))));break;
+      body=fld('Title',tin('title',v.title,'required maxlength="120" placeholder="Gandhi Jayanti"'))+'<div class="frow">'+fld('First day',tin('dateFrom',v.dateFrom||today,'type="date" required'))+fld('Last day',tin('dateTo',v.dateTo||v.dateFrom||today,'type="date" required'))+'</div>'+fld('This is',sel('kind',[['off','Off day (no classes)'],['working','Working day (turn an off day into a working day)']],v.kind||'off'))+'<div class="frow">'+fld('From period',sel('slotFrom',[['','Whole day']].concat(slotList().filter(function(x){return !x.isBreak}).map(function(x){return [x.id,x.label+' · '+x.start]})),v.slotFrom||''))+fld('To period',sel('slotTo',[['','Whole day']].concat(slotList().filter(function(x){return !x.isBreak}).map(function(x){return [x.id,x.label+' · '+x.end]})),v.slotTo||''))+'</div><p class="note" style="margin:-4px 0 8px">Leave both on Whole day for a full day off. Choose periods to free only part of the day. Periods apply to off days, not working days.</p>'+fld('Applies to',scopeHTML(v.scope!==undefined?v.scope:(v.classId||(me().role==='admin'?'':'D:'+ui.trDept))));break;
     case 'user':title=(v.id?'Edit':'Add')+' user';
       body=fld('Full name',tin('name',v.name,'required'))+fld('Email (used to sign in)',tin('email',v.email,'type="email" required autocomplete="off"'))+fld(v.id?'New password (leave empty to keep the current one)':'Password',tin('password','','type="password" minlength="8" autocomplete="new-password"'+(v.id?'':' required')))+'<div class="frow">'+fld('Role',sel('role',Object.keys(ROLE).map(function(k){return [k,ROLE[k]]}),v.role||'stakeholder'))+fld('Main department (department heads)',sel('deptId',deptOpts('None'),v.deptId||''))+'</div>'+'<fieldset class="move"><legend>Also manages (department heads only)</legend><div class="chips">'+S.depts.map(function(dx){return '<label class="chk"><input type="checkbox" name="moreDeptIds" value="'+dx.id+'"'+((v.moreDeptIds||[]).indexOf(dx.id)>-1?' checked':'')+'> '+esc(dx.code)+'</label>'}).join('')+'</div><p class="note" style="margin:6px 0 0">A head can build timetables, set lunch breaks, mark classes away and lend venues for every department ticked here, as well as the main one.</p></fieldset>';break;
     case 'tt':{var r=resById(v.resId),s=slotById(v.slotId);title=(v.id?'Edit':'Add')+' class';
@@ -932,10 +971,14 @@ function submitForm(type,d){
     if((Date.parse(v.dateTo)-Date.parse(v.dateFrom))/864e5>366)return fail('An off-day range can be at most one year.',d);
     var sc=v.scope||'',ids=scopeIds(sc);
     v.kind=v.kind==='working'?'working':'off';
+    v.slotFrom=v.slotFrom||null;v.slotTo=v.slotTo||null;
+    if(v.kind==='working'){v.slotFrom=null;v.slotTo=null}
+    if(!!v.slotFrom!==!!v.slotTo)return fail('Choose both periods, or leave both on Whole day.',d);
+    if(v.slotFrom){var slx=slotList().map(function(x){return x.id});if(slx.indexOf(v.slotFrom)>slx.indexOf(v.slotTo)){var swp=v.slotFrom;v.slotFrom=v.slotTo;v.slotTo=swp}}
     if(sc===''&&me().role!=='admin')return fail('Choose the years and sections this off day applies to.',d);
     if(!ids.length)return fail('That department has no years or sections yet.',d);
-    if(v.id){o=S.holidays.filter(function(h){return h.id===v.id})[0];o.title=v.title;o.dateFrom=v.dateFrom;o.dateTo=v.dateTo;o.kind=v.kind;o.classId=ids[0];if(ids.length>1)ids.slice(1).forEach(function(cid){S.holidays.push({id:uid('h'),dateFrom:v.dateFrom,dateTo:v.dateTo,title:v.title,classId:cid,kind:v.kind,by:me().name})})}
-    else ids.forEach(function(cid){S.holidays.push({id:uid('h'),dateFrom:v.dateFrom,dateTo:v.dateTo,title:v.title,classId:cid,kind:v.kind,by:me().name})});
+    if(v.id){o=S.holidays.filter(function(h){return h.id===v.id})[0];o.title=v.title;o.dateFrom=v.dateFrom;o.dateTo=v.dateTo;o.kind=v.kind;o.slotFrom=v.slotFrom;o.slotTo=v.slotTo;o.classId=ids[0];if(ids.length>1)ids.slice(1).forEach(function(cid){S.holidays.push({id:uid('h'),dateFrom:v.dateFrom,dateTo:v.dateTo,title:v.title,classId:cid,kind:v.kind,slotFrom:v.slotFrom,slotTo:v.slotTo,by:me().name})})}
+    else ids.forEach(function(cid){S.holidays.push({id:uid('h'),dateFrom:v.dateFrom,dateTo:v.dateTo,title:v.title,classId:cid,kind:v.kind,slotFrom:v.slotFrom,slotTo:v.slotTo,by:me().name})});
     return done(v.kind==='working'?'Working day saved.':'Off day saved.');
   }
   if(type==='slot'){
@@ -1036,7 +1079,7 @@ function submitForm(type,d){
     if(!sp.length)return fail('Choose a time that is not a break.',d);
     if(lat>lr.capacity)return fail(lr.name+' seats '+lr.capacity+'. Reduce attendees or pick a larger venue.',d);
     for(i=0;i<sp.length;i++){var bb=busyAt(lr.id,v.date,sp[i].id);
-      if(bb)return fail(lr.name+' is not free in '+sp[i].label+' on '+fmtDate(v.date)+' ('+(bb.kind==='class'?'class: '+bb.e.title:'event: '+bb.ev.title)+').',d)}
+      if(bb)return fail(lr.name+' is not free in '+sp[i].label+' on '+fmtDate(v.date)+' ('+busyWhy(bb,v.date)+').',d)}
     S.events.push({id:uid('e'),resId:lr.id,date:v.date,slotIds:sp.map(function(s){return s.id}),title:v.title,by:byTxt,attendees:lat,notes:(v.notes||'').trim(),status:'confirmed',forDeptId:fdept,lentDeptId:lr.deptId,lentBy:u0.name});
     return done('Lent '+lr.name+' to '+byTxt+'.');
   }
@@ -1047,7 +1090,7 @@ function submitForm(type,d){
     var span=slotRange(v.from,v.to),r=resById(v.resId),att=parseInt(v.attendees,10)||0;
     if(att>r.capacity)return fail(r.name+' seats '+r.capacity+'. Reduce attendees or pick a larger venue.',d);
     for(i=0;i<span.length;i++){var b=busyAt(r.id,v.date,span[i].id);
-      if(b)return fail(r.name+' is not free in '+span[i].label+' on '+fmtDate(v.date)+' ('+(b.kind==='class'?'class: '+b.e.title:'event: '+b.ev.title)+').',d)}
+      if(b)return fail(r.name+' is not free in '+span[i].label+' on '+fmtDate(v.date)+' ('+busyWhy(b,v.date)+').',d)}
     S.events.push({id:uid('e'),resId:r.id,date:v.date,slotIds:span.map(function(s){return s.id}),title:v.title,by:v.by,attendees:att,notes:(v.notes||'').trim(),status:canApprove()?'confirmed':'pending'});
     ui.avDate=v.date;
     return done(canApprove()?'Booked '+r.name+'.':'Request sent for approval.');
