@@ -115,6 +115,7 @@ function locStr(r){var b=bldById(r.buildingId),f=floorById(r.floorId);return (b?
 var classById=function(id){return S.classes.filter(function(c){return c.id===id})[0]};
 function classLabel(id){var c=classById(id),d=c&&deptById(c.deptId);return c?(d?d.code:'?')+' '+c.year+c.section:String(id||'–')}
 function classFull(c){var d=deptById(c.deptId);return (d?d.code:'?')+' · Year '+c.year+' · Section '+c.section}
+function tClassesOf(deptId){return classesOf(deptId).filter(function(c){return c.tracked})}
 function classesOf(deptId){return S.classes.filter(function(c){return c.deptId===deptId}).sort(function(a,b){return a.year-b.year||a.section.localeCompare(b.section)})}
 var resById=function(id){return S.resources.filter(function(r){return r.id===id})[0]};
 var deptById=function(id){return S.depts.filter(function(d){return d.id===id})[0]};
@@ -394,12 +395,12 @@ function cumulative(classId){
 function vTrackPlan(){
   var u=me(),isHod=u.role==='hod';
   var head='<div class="head"><div><h2>Academic tracker</h2><p>Plan the hours of each load type for every week, then record what was actually completed. The week runs Monday to Friday. Saturday and Sunday are off unless converted to working days.</p></div></div>';
-  var depts=S.depts.filter(function(d){return !isHod||myDepts().indexOf(d.id)>-1});
-  if(!depts.length)return head+trNav()+emptyBox('No department is linked to this account. Ask the administrator to set it in Masters → Users.');
+  var depts=S.depts.filter(function(d){return (!isHod||myDepts().indexOf(d.id)>-1)&&tClassesOf(d.id).length});
+  if(!depts.length)return head+trNav()+emptyBox(NOMAP(u));
   var loads=loadList();
   if(!loads.length)return head+trNav()+emptyBox('No load types yet. The administrator adds them in Masters → Load types.');
   if(!ui.trDept||!depts.some(function(d){return d.id===ui.trDept}))ui.trDept=depts[0].id;
-  var cls=classesOf(ui.trDept);
+  var cls=tClassesOf(ui.trDept);
   if(!cls.length)return head+trNav()+trControls(depts,cls)+emptyBox('This department has no years or sections yet. The administrator adds them in Masters → Years & sections.');
   if(!ui.trClass||(trIsGroup(ui.trClass)?!trIds(ui.trClass).length:!cls.some(function(c){return c.id===ui.trClass})))ui.trClass=cls[0].id;
   var ws=weeksOfMonth(ui.trMonth);
@@ -458,6 +459,7 @@ function vTrackPlan(){
 }
 
 function vTrack(){return ui.trView==='report'?vTrackReport():ui.trView==='board'?vTrackBoard():vTrackPlan()}
+function NOMAP(u){return u.role==='admin'?'No department is mapped to the Academic tracker yet. Choose the departments, years and sections in Masters → Tracker mapping.':(u.role==='hod'&&!myDepts().length?'No department is linked to this account. Ask the administrator to set it in Masters → Users.':'No department is mapped to the Academic tracker yet. The administrator maps departments, years and sections in Masters → Tracker mapping.')}
 function trNav(){
   return '<div class="seg trnav" role="tablist" aria-label="Tracker views">'+[['plan','Weekly plan'],['report','Progress report'],['board','Leaderboard']].map(function(v){return '<button class="btn'+(ui.trView===v[0]?' on':'')+'" role="tab" aria-selected="'+(ui.trView===v[0])+'" data-act="trview" data-v="'+v[0]+'">'+v[1]+'</button>'}).join('')+'</div>';
 }
@@ -502,10 +504,10 @@ function periodSel(){
 function periodName(){return ui.rpPeriod==='all'?'all weeks to date':new Date(ui.rpPeriod+'-01T00:00:00Z').toLocaleDateString('en-IN',{month:'long',year:'numeric',timeZone:'UTC'})}
 function vTrackReport(){
   var head='<div class="head"><div><h2>Academic tracker</h2><p>How planned hours compare with completed hours, by section, load type and week.</p></div></div>';
-  var depts=S.depts.filter(function(d){return classesOf(d.id).length});
-  if(!depts.length)return head+trNav()+emptyBox('No department has years and sections yet.');
+  var depts=S.depts.filter(function(d){return tClassesOf(d.id).length});
+  if(!depts.length)return head+trNav()+emptyBox(NOMAP(me()));
   if(!ui.rpDept||!depts.some(function(d){return d.id===ui.rpDept}))ui.rpDept=(depts.filter(function(d){return myDepts().indexOf(d.id)>-1})[0]||depts[0]).id;
-  var d=deptById(ui.rpDept),cls=classesOf(d.id),idx=trIndex(),W=periodWeeks(ui.rpPeriod),K=ui.rpKind;
+  var d=deptById(ui.rpDept),cls=tClassesOf(d.id),idx=trIndex(),W=periodWeeks(ui.rpPeriod),K=ui.rpKind;
   var T=trStats(cls.map(function(c){return c.id}),W,K,idx);
   var ctl='<div class="panel"><div class="filters"><label>Department<select data-set="rpDept">'+depts.map(function(x){return '<option value="'+x.id+'"'+(x.id===d.id?' selected':'')+'>'+esc(x.code+' – '+x.name)+'</option>'}).join('')+'</select></label>'+periodSel()+'<button class="btn sm" data-act="rpcsv">Download CSV</button><button class="btn sm" data-act="rpprint">Print</button></div></div>';
   if(!W.length||!T.planned)return head+trNav()+ctl+emptyBox('No hours were planned for '+esc(d.code)+' in '+periodName()+'. Plans appear here once department heads enter them in the Weekly plan.');
@@ -522,11 +524,11 @@ function vTrackReport(){
 }
 function vTrackBoard(){
   var head='<div class="head"><div><h2>Academic tracker</h2><p>Departments ranked on how closely they deliver planned hours, and how reliably they report them. Everyone can see every department.</p></div></div>';
-  var depts=S.depts.filter(function(d){return classesOf(d.id).length});
-  if(!depts.length)return head+trNav()+emptyBox('No department has years and sections yet.');
+  var depts=S.depts.filter(function(d){return tClassesOf(d.id).length});
+  if(!depts.length)return head+trNav()+emptyBox(NOMAP(me()));
   var idx=trIndex(),W=periodWeeks(ui.rpPeriod),K=ui.rpKind,mine=myDepts();
   var ctl='<div class="panel"><div class="filters">'+periodSel()+'<span class="note" style="align-self:center;max-width:60ch">Score = 70% plan adherence + 30% weeks reported. Only weeks with planned hours count.</span></div></div>';
-  var rows=depts.map(function(d){var cids=classesOf(d.id).map(function(c){return c.id});return {d:d,s:trStats(cids,W,K,idx),n:cids.length}});
+  var rows=depts.map(function(d){var cids=tClassesOf(d.id).map(function(c){return c.id});return {d:d,s:trStats(cids,W,K,idx),n:cids.length}});
   var ranked=rows.filter(function(r){return r.s.score!==null}).sort(function(a,b){return b.s.score-a.s.score||b.s.adh-a.s.adh});
   var unranked=rows.filter(function(r){return r.s.score===null});
   if(!ranked.length)return head+trNav()+ctl+emptyBox('No hours have been planned and reported for '+periodName()+' yet. The board fills in once department heads enter plans and actual hours.');
@@ -534,7 +536,7 @@ function vTrackBoard(){
   var banner='<div class="leadband"><div class="trophy" aria-hidden="true">★</div><div><b>'+esc(lead.d.name)+'</b> leads '+(K?K.toLowerCase()+' hours':'the campus')+' for '+periodName()+' with a score of <b>'+pct(lead.s.score)+'</b>.</div></div>';
   var tbl='<div class="scroll"><table class="tbl trtbl board"><thead><tr><th>Rank</th><th>Department</th><th>Score</th><th>Plan adherence</th><th>Weeks reported</th><th>Net hours against plan</th><th>Sections</th></tr></thead><tbody>'+ranked.map(function(r,i){var own=mine.indexOf(r.d.id)>-1,df=rnd1(r.s.diff);return '<tr'+(own?' class="mine"':'')+'><td><span class="rk r'+(i<3?i+1:0)+'">'+(i+1)+'</span></td><td><b>'+esc(r.d.name)+'</b> <span class="tcode">'+esc(r.d.code)+'</span>'+(own?' <span class="badge b-ok">Your department</span>':'')+'</td><td class="score mono">'+pct(r.s.score)+'</td><td>'+meter(r.s.adh)+' <span class="mono">'+pct(r.s.adh)+'</span></td><td class="mono">'+(r.s.closed?r.s.reported+'/'+r.s.closed+' · '+pct(r.s.rep):'–')+'</td>'+(r.s.pp?(df===0?'<td class="vr-ok">✓ On plan</td>':'<td class="vr-bad">'+sgn(df)+' hrs</td>'):'<td class="vr-wait">–</td>')+'<td class="mono">'+r.n+'</td></tr>'}).join('')+'</tbody></table></div>';
   var un=unranked.length?'<p class="note">Not ranked yet, nothing planned for this period: '+unranked.map(function(r){return esc(r.d.code)}).join(', ')+'.</p>':'';
-  var all=[];depts.forEach(function(d){classesOf(d.id).forEach(function(c){var s2=trStats([c.id],W,K,idx);if(s2.score!==null)all.push({d:d,c:c,s:s2})})});
+  var all=[];depts.forEach(function(d){tClassesOf(d.id).forEach(function(c){var s2=trStats([c.id],W,K,idx);if(s2.score!==null)all.push({d:d,c:c,s:s2})})});
   all.sort(function(a,b){return b.s.score-a.s.score||b.s.adh-a.s.adh});
   var top=all.slice(0,10),secTbl=top.length?'<section><h3 style="margin-bottom:10px">Top sections</h3><div class="scroll"><table class="tbl trtbl board"><thead><tr><th>Rank</th><th>Section</th><th>Score</th><th>Plan adherence</th><th>Weeks reported</th></tr></thead><tbody>'+top.map(function(r,i){var own=mine.indexOf(r.d.id)>-1;return '<tr'+(own?' class="mine"':'')+'><td><span class="rk r'+(i<3?i+1:0)+'">'+(i+1)+'</span></td><td><b>'+esc(r.d.code)+' · Year '+r.c.year+' '+esc(r.c.section)+'</b></td><td class="score mono">'+pct(r.s.score)+'</td><td>'+meter(r.s.adh)+' <span class="mono">'+pct(r.s.adh)+'</span></td><td class="mono">'+(r.s.closed?r.s.reported+'/'+r.s.closed:'–')+'</td></tr>'}).join('')+'</tbody></table></div></section>':'';
   return head+trNav()+ctl+banner+tbl+un+secTbl;
@@ -543,7 +545,7 @@ function rpCsv(){
   var d=deptById(ui.rpDept),idx=trIndex(),W=periodWeeks(ui.rpPeriod),K=ui.rpKind;
   var q=function(v){v=String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
   var out=[['Department','Year','Section','Planned hrs','Completed hrs','Net vs plan hrs','Adherence %','Weeks reported','Weeks closed'].join(',')];
-  classesOf(d.id).forEach(function(c){var t=trStats([c.id],W,K,idx);out.push([d.code,c.year,c.section,rnd1(t.planned),t.pp?rnd1(t.actual):'',t.pp?rnd1(t.diff):'',t.adh===null?'':Math.round(t.adh*100),t.reported,t.closed].map(q).join(','))});
+  tClassesOf(d.id).forEach(function(c){var t=trStats([c.id],W,K,idx);out.push([d.code,c.year,c.section,rnd1(t.planned),t.pp?rnd1(t.actual):'',t.pp?rnd1(t.diff):'',t.adh===null?'':Math.round(t.adh*100),t.reported,t.closed].map(q).join(','))});
   var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([out.join('\n')],{type:'text/csv'}));a.download='academic-progress-'+d.code+'-'+ui.rpPeriod+'.csv';document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},500);
 }
 function kindTag(h){return h.kind==='working'?'<span class="dtag work">Working day</span>':'<span class="dtag">Off day</span>'}
@@ -560,7 +562,7 @@ function trCalendar(cid,canMark,lab){
   return '<div class="calbox"><div class="rowhead"><b>'+title+' · '+esc(lab||classLabel(cid))+'</b><span class="seg"><button class="btn sm" data-act="trmonth" data-n="-1">Previous</button><button class="btn sm" data-act="trmonth" data-n="0">This month</button><button class="btn sm" data-act="trmonth" data-n="1">Next</button></span></div><div class="calgrid">'+hd+cells+'</div><p class="note" style="margin:6px 0 0"><span class="lg work"></span>Working <span class="lg off"></span>Off day <span class="lg weekend"></span>Weekend <span class="lg wk"></span>Converted to working'+(canMark?'. Click a date to mark it off, or to make an off day a working day.':'.')+'</p></div>';
 }
 function trIsGroup(sel){return sel==='ALL'||(typeof sel==='string'&&sel.indexOf('Y:')===0)}
-function trIds(sel){var cl=classesOf(ui.trDept);if(sel==='ALL')return cl.map(function(c){return c.id});if(trIsGroup(sel)){var y=+sel.slice(2);return cl.filter(function(c){return c.year===y}).map(function(c){return c.id})}return [sel]}
+function trIds(sel){var cl=tClassesOf(ui.trDept);if(sel==='ALL')return cl.map(function(c){return c.id});if(trIsGroup(sel)){var y=+sel.slice(2);return cl.filter(function(c){return c.year===y}).map(function(c){return c.id})}return [sel]}
 function trScope(sel){return sel==='ALL'?'D:'+ui.trDept:trIsGroup(sel)?'Y:'+ui.trDept+':'+sel.slice(2):sel}
 function trGroupLabel(sel){var d=deptById(ui.trDept);return sel==='ALL'?'All years and sections of '+(d?d.code:''):'Year '+sel.slice(2)+' · all sections'}
 function weeksOfMonth(m){var first=m+'-01',last=new Date(Date.UTC(+m.slice(0,4),+m.slice(5,7),0)).toISOString().slice(0,10),r=[];for(var w=mondayOf(first);w<=last;w=addD(w,7)){if(addD(w,4)>=first)r.push(w)}return r}
@@ -584,6 +586,14 @@ function trControlsHTML(depts,cls,ws){
     '<label>Week<select id="tr-week" data-set="trWeek">'+ws.map(function(w,i){return '<option value="'+w+'"'+(w===ui.trWeek?' selected':'')+'>Week '+(i+1)+' · '+fmtShort(w)+' to '+fmtShort(addD(w,4))+'</option>'}).join('')+'</select></label>':'');
 }
 function trControls(depts,cls){return '<div class="panel"><div class="filters">'+trControlsHTML(depts,cls)+'</div></div>'}
+function mTrack(){
+  var rows=S.depts.map(function(d){
+    var cl=classesOf(d.id);if(!cl.length)return '';
+    var on=cl.filter(function(c){return c.tracked}).length;
+    return '<tr><td><label class="chk"><input type="checkbox" data-trk="d:'+d.id+'"'+(on===cl.length?' checked':'')+'> <b>'+esc(d.name)+'</b> <span class="tcode">'+esc(d.code)+'</span></label><div class="note">'+(on?on+' of '+cl.length+' sections in the tracker':'Not in the tracker')+'</div></td><td>'+yearsOf(cl).map(function(y){return '<div class="yrow"><span class="yl">Year '+y+'</span>'+cl.filter(function(c){return c.year===y}).map(function(c){return '<label class="chip'+(c.tracked?' on':'')+'"><input type="checkbox" data-trk="c:'+c.id+'"'+(c.tracked?' checked':'')+'> '+esc(c.section)+'</label>'}).join('')+'</div>'}).join('')+'</td></tr>';
+  }).join('');
+  return '<div class="scroll"><table class="tbl"><thead><tr><th>Department</th><th>Years and sections shown in the Academic tracker</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+(S.classes.length?'':noMatch(0,'Add years and sections first in Masters → Years & sections.'));
+}
 function mLoads(){
   var L=loadList().filter(function(l){return hit(mfv('loads','q'),[l.name,l.kind])&&(!mfv('loads','kind')||l.kind===mfv('loads','kind'))});
   return mfBar('loads',[mfTxt('loads','Search','Load type name'),mfSel('loads','kind','Kind',LOAD_KINDS.map(function(k){return [k,k]}))],L.length,S.loads.length)+'<div class="scroll"><table class="tbl"><thead><tr><th>Load type</th><th>Kind</th><th>Weekly plans using it</th><th></th></tr></thead><tbody>'+
@@ -597,15 +607,15 @@ function mOffdays(){
 function yearsOf(cl){var r=[];cl.forEach(function(c){if(r.indexOf(c.year)<0)r.push(c.year)});return r.sort(function(a,b){return a-b})}
 function scopeIds(sc){
   if(sc===''||sc==null)return [null];
-  if(sc.indexOf('D:')===0)return classesOf(sc.slice(2)).map(function(c){return c.id});
-  if(sc.indexOf('Y:')===0){var pp=sc.split(':');return classesOf(pp[1]).filter(function(c){return c.year===+pp[2]}).map(function(c){return c.id})}
+  if(sc.indexOf('D:')===0)return tClassesOf(sc.slice(2)).map(function(c){return c.id});
+  if(sc.indexOf('Y:')===0){var pp=sc.split(':');return tClassesOf(pp[1]).filter(function(c){return c.year===+pp[2]}).map(function(c){return c.id})}
   return [sc];
 }
 function scopeHTML(val,noCampus,id){
   var u=me(),admin=u.role==='admin',o='';
   if(admin&&!noCampus)o+='<option value=""'+(val===''?' selected':'')+'>All departments (whole campus)</option>';
   var ds=S.depts.filter(function(d){return admin||myDepts().indexOf(d.id)>-1});
-  ds.forEach(function(d){var cl=classesOf(d.id);if(!cl.length)return;
+  ds.forEach(function(d){var cl=tClassesOf(d.id);if(!cl.length)return;
     o+='<optgroup label="'+esc(d.code+' – '+d.name)+'"><option value="D:'+d.id+'"'+(val==='D:'+d.id?' selected':'')+'>All years and sections of '+esc(d.code)+'</option>'+yearsOf(cl).map(function(yr){return '<option value="Y:'+d.id+':'+yr+'"'+(val==='Y:'+d.id+':'+yr?' selected':'')+'>Year '+yr+' · all sections</option>'}).join('')+cl.map(function(c){return '<option value="'+c.id+'"'+(val===c.id?' selected':'')+'>Year '+c.year+' · Section '+esc(c.section)+'</option>'}).join('')+'</optgroup>'});
   return '<select id="'+(id||'f-scope')+'" name="scope">'+o+'</select>';
 }
@@ -746,10 +756,10 @@ function mAlloc(){
   L.map(function(r){return '<tr><td><b>'+esc(r.name)+'</b></td><td>'+tcode(r.type)+esc(r.type)+'</td><td class="mono">'+r.capacity+'</td><td class="mono">'+S.tt.filter(function(t){return t.resId===r.id}).length+'</td><td><select id="alloc-'+r.id+'" data-alloc="'+r.id+'" aria-label="Allocate '+esc(r.name)+'">'+deptOpts('Central pool (no department)').map(function(o){return '<option value="'+o[0]+'"'+(o[0]===(r.deptId||'')?' selected':'')+'>'+esc(o[1])+'</option>'}).join('')+'</select></td></tr>'}).join('')+'</tbody></table></div>'+(L.length?'':noMatch(S.resources.length,'No venues yet.'));
 }
 function vMasters(){
-  var subs=[['depts','Departments'],['classes','Years & sections'],['slots','Time slots'],['bld','Buildings'],['floors','Floors'],['res','Venues'],['users','Users'],['alloc','Allocation'],['loads','Load types'],['offdays','Off days']];
+  var subs=[['depts','Departments'],['classes','Years & sections'],['slots','Time slots'],['bld','Buildings'],['floors','Floors'],['res','Venues'],['users','Users'],['alloc','Allocation'],['track','Tracker mapping'],['loads','Load types'],['offdays','Off days']];
   var add={depts:['dept','Add department'],classes:['class','Add year & sections'],slots:['slot','Add time slot'],bld:['building','Add building'],floors:['floor','Add floor'],res:['resource','Add venue'],users:['user','Add user'],loads:['load','Add load type'],offdays:['offday','Add off day']}[ui.mtab];
-  var body={depts:mDepts,classes:mClasses,slots:mSlots,bld:mBuildings,floors:mFloors,res:mRes,users:mUsers,alloc:mAlloc,loads:mLoads,offdays:mOffdays}[ui.mtab]();
-  var blurb2={loads:'Types of teaching and training hours that department heads plan and track every week, such as theory, laboratory or aptitude training.',offdays:'Central holidays for every department. Use a date range for more than one day. Department heads mark their own sections’ off days in the Academic tracker. Saturdays and Sundays are off by default; add a working day to override.'};
+  var body={depts:mDepts,classes:mClasses,slots:mSlots,bld:mBuildings,floors:mFloors,res:mRes,users:mUsers,alloc:mAlloc,track:mTrack,loads:mLoads,offdays:mOffdays}[ui.mtab]();
+  var blurb2={track:'Choose which departments, years and sections take part in the Academic tracker. Only mapped ones appear in the weekly plan, the progress report and the leaderboard.',loads:'Types of teaching and training hours that department heads plan and track every week, such as theory, laboratory or aptitude training.',offdays:'Central holidays for every department. Use a date range for more than one day. Department heads mark their own sections’ off days in the Academic tracker. Saturdays and Sundays are off by default; add a working day to override.'};
   var blurb={depts:'Departments that own venues and timetables.',classes:'Years and sections of each department. Department heads pick them from a dropdown when they schedule a class.',slots:'The periods of a college day. Timetables and bookings use these.',bld:'Buildings and blocks. They appear as a dropdown when you create a venue.',floors:'Floors, ordered by level. They appear as a dropdown when you create a venue.',res:'Inventory of lecture theatres, computer labs, seminar halls and auditoriums.',users:'Everyone who signs in, with a role and, for department heads, a department.',alloc:'Assign each venue to a department or leave it in the central pool.'}[ui.mtab];
   return '<div class="head"><div><h2>Masters</h2><p>'+(blurb2[ui.mtab]||blurb)+'</p></div>'+(add?'<button class="btn primary" data-act="add" data-t="'+add[0]+'">'+add[1]+'</button>':'')+'</div>'+
     '<div class="seg">'+subs.map(function(s){return '<button class="btn sm'+(ui.mtab===s[0]?' on':'')+'" data-act="mtab" data-v="'+s[0]+'">'+s[1]+'</button>'}).join('')+'</div>'+body;
@@ -1151,6 +1161,13 @@ document.addEventListener('change',function(e){
   if(lr&&ui.modal&&ui.modal.type==='lend'){var lfm=lr.closest('form'),lfd={};new FormData(lfm).forEach(function(val,key){lfd[key]=val});ui.modal.vals=Object.assign({},ui.modal.vals,lfd);ui.modal.err='';render();return}
   var mv=e.target.closest('[data-mv]');
   if(mv&&ui.modal){var fm=mv.closest('form'),fd={};new FormData(fm).forEach(function(val,key){fd[key]=val});fd.mvDay=+fd.mvDay;fd.moveTo=fd.moveTo||'';ui.modal.vals=Object.assign({},ui.modal.vals,fd);ui.modal.err='';ui.modal.focused=true;render();return}
+  var tk=e.target.closest('[data-trk]');
+  if(tk){
+    var tt=tk.dataset.trk,ton=tk.checked;
+    if(tt.indexOf('d:')===0)S.classes.forEach(function(c){if(c.deptId===tt.slice(2))c.tracked=ton});
+    else{var tc=classById(tt.slice(2));if(tc)tc.tracked=ton}
+    save();render();return;
+  }
   var al=e.target.closest('[data-alloc]');
   if(al){
     var r=resById(al.dataset.alloc),nd=al.value||null;
