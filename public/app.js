@@ -354,7 +354,7 @@ function vAvail(){
       var b=busyAt(r.id,date,s.id);
       if(!b){var aw=awayAt(r.id,date,s.id);return '<td><'+(canBook()?'button data-act="book" data-res="'+r.id+'" data-from="'+s.id+'" data-to="'+s.id+'" class="cell free vfree pick'+(aw?' rel':'')+'" title="Book '+esc(r.name)+' at '+s.start+(aw?' (class away: '+esc(classLabel(aw.t.classId)+', '+aw.rel.reason)+')':'')+'"':'div class="cell free vfree'+(aw?' rel':'')+'"'+(aw?' title="'+esc('Class away: '+classLabel(aw.t.classId)+', '+aw.rel.reason)+'"':''))+'><i>Free</i>'+(aw?'<em>'+esc(classLabel(aw.t.classId))+' away</em>':'')+'</'+(canBook()?'button':'div')+'></td>'}
       if(b.kind==='closed')return '<td><div class="cell brk" title="Off day: venues open once it is converted to a working day">Off day</div></td>';
-      if(b.kind==='class'){var d=deptById(r.deptId);return '<td><div class="cell cls" style="--h:'+(d?d.h:200)+'" title="'+esc(b.e.title+(b.e.faculty?' · '+b.e.faculty:''))+'"><b>'+esc(b.e.title)+'</b><span>'+esc(classLabel(b.e.classId))+'</span></div></td>'}
+      if(b.kind==='class'){var d=deptById(r.deptId);return '<td><div class="cell cls" style="--h:'+(d?d.h:200)+'" title="'+esc(b.e.title+(b.e.faculty?' · '+b.e.faculty:''))+'"><b>'+esc(classLabel(b.e.classId))+'</b><span>'+esc(b.e.title)+'</span></div></td>'}
       return '<td><div class="cell ev"><b>'+esc(b.ev.title)+'</b><span>'+(b.ev.status==='pending'?'Requested':'Event')+'</span></div></td>';
     }).join('')+'</tr>';
   }).join('');
@@ -714,7 +714,7 @@ function vTimetable(){
     if(s.isBreak)return '<td><div class="cell brk">'+esc(s.label)+'</div></td>';
     if(isLunch(d.id,s.id))return '<td><div class="cell brk">Lunch</div></td>';
     var e=S.tt.filter(function(t){return t.resId===r.id&&t.day===day&&t.slotId===s.id})[0];
-    return e?'<td><button class="cell cls edit" style="--h:'+d.h+'" data-act="ttcell" data-id="'+e.id+'" data-res="'+r.id+'" data-day="'+day+'" data-slot="'+s.id+'"><b>'+esc(e.title)+'</b>'+(e.faculty?'<span>'+esc(e.faculty)+'</span>':'')+'<span>'+esc(classLabel(e.classId))+'</span></button></td>'
+    return e?'<td><button class="cell cls edit" style="--h:'+d.h+'" data-act="ttcell" data-id="'+e.id+'" data-res="'+r.id+'" data-day="'+day+'" data-slot="'+s.id+'"><b>'+esc(classLabel(e.classId))+'</b><span>'+esc(e.title)+'</span>'+(e.faculty?'<span>'+esc(e.faculty)+'</span>':'')+'</button></td>'
       :'<td><button class="cell free edit" data-act="ttcell" data-res="'+r.id+'" data-day="'+day+'" data-slot="'+s.id+'" aria-label="Add class '+DAYF[day]+' '+esc(s.label)+'"><i>+ Add</i></button></td>';
   };
   var tm=function(s){return '<th class="tm">'+esc(s.label)+'<small>'+s.start+'–'+s.end+'</small></th>'};

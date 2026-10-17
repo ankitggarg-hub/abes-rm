@@ -368,3 +368,4 @@ main>*{min-width:0;max-width:100%}
 .kpi .kbar i{display:block;height:100%;background:var(--c)}
 .kl{margin:14px 0 8px;font-size:15px}
 @media (prefers-color-scheme:dark){.kpi.on{background:hsl(var(--h) 35% 18%)}}
+.cell.cls b{font-size:14px;font-weight:700;letter-spacing:.01em}.cell.cls span{font-size:11px;opacity:.85}
