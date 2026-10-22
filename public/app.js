@@ -17,7 +17,7 @@ var toMin=function(t){var p=t.split(':');return +p[0]*60+ +p[1]};
 var uid=function(p){return p+Math.random().toString(36).slice(2,8)};
 
 /* ---------- state ---------- */
-var KEYS=['depts','classes','slots','buildings','floors','resources','users','tt','releases','events','vreqs','loads','holidays','wplans'];
+var KEYS=['depts','classes','slots','buildings','floors','resources','users','tt','releases','events','vreqs','loads','holidays','wplans','unlocks'];
 var LOAD_KINDS=['Academic','Training'];
 function emptyState(){var o={};KEYS.forEach(function(k){o[k]=[]});return o}
 var S=emptyState();
@@ -113,7 +113,7 @@ var floorById=function(id){return S.floors.filter(function(f){return f.id===id})
 var floorList=function(){return S.floors.slice().sort(function(a,b){return a.level-b.level})};
 function locStr(r){var b=bldById(r.buildingId),f=floorById(r.floorId);return (b?b.name:'No building')+' · '+(f?f.name:'no floor')}
 var classById=function(id){return S.classes.filter(function(c){return c.id===id})[0]};
-function classLabel(id){var c=classById(id),d=c&&deptById(c.deptId);return c?(d?d.code:'?')+' '+c.year+c.section:String(id||'–')}
+function classLabel(id){var c=classById(id),d=c&&deptById(c.deptId);return c?(d?d.code:'?')+'-'+c.year+'-'+c.section:String(id||'–')}
 function classFull(c){var d=deptById(c.deptId);return (d?d.code:'?')+' · Year '+c.year+' · Section '+c.section}
 function tClassesOf(deptId){return classesOf(deptId).filter(function(c){return c.tracked})}
 function classesOf(deptId){return S.classes.filter(function(c){return c.deptId===deptId}).sort(function(a,b){return a.year-b.year||a.section.localeCompare(b.section)})}
@@ -437,7 +437,7 @@ function vrAlerts(){
   return out.sort(function(a,b){return (a.k==='pending'?0:1)-(b.k==='pending'?0:1)||a.q.date.localeCompare(b.q.date)});
 }
 function alertsHTML(){
-  var al=vrAlerts();if(!al.length)return '';
+  var al=vrAlerts(),rem=trReminder();if(!al.length)return rem?'<section class="alerts" aria-label="Reminders">'+rem+'</section>':'';
   var rows=al.map(function(a){
     var q=a.q,r=resById(q.resId),vn='<b>'+esc(r?r.name:'a venue')+'</b>',when=fmtDate(q.date)+', <span class="mono">'+timeRange(q.slotIds)+'</span>',cl=q.classId&&classById(q.classId)?' for <b>'+esc(classLabel(q.classId))+'</b>':'',cls,ic,txt,btn='';
     var dis='<button class="btn sm" data-act="vrseen" data-id="'+q.id+'" data-side="'+(a.side||'')+'">Dismiss</button>';
@@ -449,7 +449,7 @@ function alertsHTML(){
     return '<div class="alert '+cls+'" role="alert"><span class="aic" aria-hidden="true">'+ic+'</span><div class="atx">'+txt+'</div><div class="aact">'+btn+'</div></div>';
   }).join('');
   var np=al.filter(function(a){return a.k==='pending'}).length;
-  return '<section class="alerts" aria-label="Venue request alerts"><div class="rowhead"><h3>'+(np?np+' venue request'+(np===1?'':'s')+' waiting for you':'Venue request updates')+'</h3><button class="link" data-act="gotoreq">Open venue requests</button></div>'+rows+'</section>';
+  return '<section class="alerts" aria-label="Alerts">'+rem+'<div class="rowhead"><h3>'+(np?np+' venue request'+(np===1?'':'s')+' waiting for you':'Venue request updates')+'</h3><button class="link" data-act="gotoreq">Open venue requests</button></div>'+rows+'</section>';
 }
 function reqBadge(q){
   var st=q.status==='pending'&&q.date<today?'expired':q.status;
@@ -571,6 +571,25 @@ function cumulative(classId){
   S.wplans.forEach(function(r){if(r.classId===classId&&r.weekStart<=cut&&r.actual!==null&&r.actual!==undefined){d+=r.actual-r.planned;n++}});
   return {diff:rnd1(d),entered:n};
 }
+/* a week locks after the Monday that follows it; only the administrator can unlock it */
+function wkDeadline(w){return addD(w,7)}
+function unlockFor(cid,w){return S.unlocks.filter(function(x){return x.classId===cid&&x.weekStart===w&&x.until>=today})[0]||null}
+function wkLocked(ids,w){return today>wkDeadline(w)&&ids.some(function(id){return !unlockFor(id,w)})}
+function trReminder(){
+  var u=me();if(!u||u.role!=='hod')return '';
+  var out='';
+  [mondayOf(today),addD(mondayOf(today),-7)].forEach(function(w){
+    if(today>wkDeadline(w))return;
+    var n=0;
+    myDepts().forEach(function(did){tClassesOf(did).forEach(function(c){
+      if(!ui.userId||wkLocked([c.id],w))return;
+      var lw=lastWorking(c.id,w);if(lw&&today<lw)return;
+      if(S.wplans.some(function(r){return r.classId===c.id&&r.weekStart===w&&r.planned>0&&(r.actual===null||r.actual===undefined)}))n++;
+    })});
+    if(n)out+='<div class="alert a-warn" role="alert"><span class="aic" aria-hidden="true">!</span><div class="atx">Week of <b>'+fmtShort(w)+' – '+fmtShort(addD(w,4))+'</b>: progress is still missing for <b>'+n+' section'+(n===1?'':'s')+'</b>. Update it by <b>Monday '+fmtShort(wkDeadline(w))+'</b>. After that the week locks and only the administrator can unlock it.</div><div class="aact"><button class="btn primary sm" data-act="trgo" data-w="'+w+'">Open tracker</button></div></div>';
+  });
+  return out;
+}
 function vTrackPlan(){
   var u=me(),isHod=u.role==='hod';
   var head='<div class="head"><div><h2>Academic tracker</h2><p>Plan the hours of each load type for every week, then record what was actually completed. The week runs Monday to Friday. Saturday and Sunday are off unless converted to working days.</p></div></div>';
@@ -601,18 +620,23 @@ function vTrackPlan(){
   var gMP=0,gMA=0,gMD=0,gMN=0,rows='';
   ws.forEach(function(w){
     var open=wkOpen(w),isSel=w===week,cur=isSel?' cur':'',tp=0,ta=0,td=0,tn=0,tds='';
+    var locked=wkLocked(ids,w),editW=edit&&(!locked||u.role==='admin');
     flat.forEach(function(f){
       var l=f.l,cv=cellVals(ids,w,l.id),psum=0,asum=0,dsum=0,anum=0;
       ids.forEach(function(id){var r=planRow(id,w,l.id),pp=r?r.planned:0,aa=r&&r.actual!==undefined&&r.actual!==null?r.actual:null;psum+=pp;if(aa!==null){asum+=aa;dsum+=aa-pp;anum++}});
       var pAvg=psum/n;tp+=pAvg;LM[l.id].p+=pAvg;
       if(anum){ta+=asum/n;td+=dsum/n;tn++;LM[l.id].a+=asum/n;LM[l.id].d+=dsum/n;LM[l.id].n++}
-      var pc=edit?'<input class="hrs" type="number" min="0" max="100" step="0.5" inputmode="decimal" value="'+(cv.pMixed?'':(cv.p?cv.p:''))+'" placeholder="'+(cv.pMixed?'mixed':'0')+'" data-tr="'+(grp?ui.trClass:cid)+'|'+l.id+'|planned|'+w+'" aria-label="Planned hours, '+esc(l.name)+', week of '+fmtShort(w)+'">':'<span class="mono">'+(cv.pMixed?'mixed':(cv.p||'–'))+'</span>';
+      var pc=editW?'<input class="hrs" type="number" min="0" max="100" step="0.5" inputmode="decimal" value="'+(cv.pMixed?'':(cv.p?cv.p:''))+'" placeholder="'+(cv.pMixed?'mixed':'0')+'" data-tr="'+(grp?ui.trClass:cid)+'|'+l.id+'|planned|'+w+'" aria-label="Planned hours, '+esc(l.name)+', week of '+fmtShort(w)+'">':'<span class="mono">'+(cv.pMixed?'mixed':(cv.p||'–'))+'</span>';
       var tone=anum&&!cv.pMixed&&!cv.aMixed&&cv.a!==null?(rnd1(cv.a-cv.p)===0?' ok':' bad'):'';
-      var ac=(edit&&!grp)?'<input class="hrs" type="number" min="0" max="100" step="0.5" inputmode="decimal" value="'+(cv.a===null?'':cv.a)+'" placeholder="'+(open?'hrs':'–')+'"'+(open?'':' disabled title="Opens on the last working day of this week"')+' data-tr="'+cid+'|'+l.id+'|actual|'+w+'" aria-label="Actual hours, '+esc(l.name)+', week of '+fmtShort(w)+'">':'<span class="mono">'+(cv.aMixed?'mixed':(cv.a===null?'–':cv.a))+'</span>';
+      var ac=(editW&&!grp)?'<input class="hrs" type="number" min="0" max="100" step="0.5" inputmode="decimal" value="'+(cv.a===null?'':cv.a)+'" placeholder="'+(open?'hrs':'–')+'"'+(open?'':' disabled title="Opens on the last working day of this week"')+' data-tr="'+cid+'|'+l.id+'|actual|'+w+'" aria-label="Actual hours, '+esc(l.name)+', week of '+fmtShort(w)+'">':'<span class="mono">'+(cv.aMixed?'mixed':(cv.a===null?'–':cv.a))+'</span>';
       tds+='<td class="wp'+(f.start?' gs':'')+cur+'">'+pc+'</td><td class="wa'+tone+cur+'">'+ac+(tone?'<small class="vb">'+(tone===' ok'?'✓':sgn(cv.a-cv.p))+'</small>':'')+'</td>';
     });
     gMP+=tp;gMA+=ta;gMD+=td;gMN+=tn;
     var chip=w===mondayOf(today)?'<span class="wchip now">This week</span>':addD(w,6)<today?'<span class="wchip">Past</span>':'<span class="wchip soon">Upcoming</span>';
+    var ulk=ids.length===1?unlockFor(cid,w):null,adm=u.role==='admin';
+    if(locked)chip+=' <span class="wchip lock" title="Closed on Monday '+fmtShort(wkDeadline(w))+'">🔒 Locked</span>'+(adm?' <button class="btn sm" data-act="wkunlock" data-w="'+w+'">Unlock</button>':'');
+    else if(ulk)chip+=' <span class="wchip unl">Unlocked until '+fmtShort(ulk.until)+'</span>'+(adm?' <button class="btn sm" data-act="wklock" data-w="'+w+'">Lock again</button>':'');
+    else if(today<=wkDeadline(w)&&addD(w,6)<today)chip+=' <span class="wchip due">Update by Mon '+fmtShort(wkDeadline(w))+'</span>';
     var tt=tn?(rnd1(td)===0?' ok':' bad'):'';
     rows+='<tr class="'+(isSel?'cur':'')+'"><td class="wk0"><button class="link" data-act="trwk" data-w="'+w+'">'+fmtShort(w)+' – '+fmtShort(addD(w,4))+'</button> '+chip+'</td>'+tds+
       '<td class="mono mon">'+rnd1(tp)+'</td><td class="mono mon'+tt+'">'+(tn?rnd1(ta):'–')+'</td>'+varCell(0,tn?rnd1(td):null,' mon')+'</tr>';
@@ -623,7 +647,7 @@ function vTrackPlan(){
   rows+='<tr class="sub"><td class="wk0">Month vs plan</td>'+mv+'<td colspan="3" class="mon"></td></tr>';
   var lw=lastWorking(cid,week),open=wkOpen(week);
   var note=grp?'Figures are the average per section. Hours you type under Plan are applied to every section in this group. Pick a single section to enter actual hours.':(edit?(open?'Enter what was actually completed in the week that has ended or is ending.':'Planned hours can be entered any time. Actual hours open on the last working day of each week.'):'You can view this plan. Only the department head or an administrator can change it.');
-  var table='<div class="scroll"><table class="tbl trtbl trmonth trwk"><thead><tr>'+h1+'</tr><tr>'+h2+'</tr><tr>'+h3+'</tr></thead><tbody>'+rows+'</tbody></table></div><p class="note" style="margin:6px 0 0">'+note+' Green means the target was met exactly. Red shows how many hours over (+) or under (−) the plan. Click a week to see its days above.</p>';
+  var table='<div class="scroll"><table class="tbl trtbl trmonth trwk"><thead><tr>'+h1+'</tr><tr>'+h2+'</tr><tr>'+h3+'</tr></thead><tbody>'+rows+'</tbody></table></div><p class="note" style="margin:6px 0 0">'+note+' Progress for a week can be updated until the Monday after it. Then the week locks and only the administrator can unlock it. Green means the target was met exactly. Red shows how many hours over (+) or under (−) the plan. Click a week to see its days above.</p>';
   var sum=cls.map(function(c){
     var t=weekTotals(c.id,week),cu=cumulative(c.id);
     return '<tr'+(ids.indexOf(c.id)>-1?' class="cur"':'')+'><td><button class="link" data-act="trclass" data-id="'+c.id+'"><b>Year '+c.year+' · '+esc(c.section)+'</b></button></td><td class="mono">'+t.planned+'</td><td class="mono">'+(t.entered?t.actual:'–')+'</td>'+varCell(0,t.entered?t.diff:null)+varCell(0,cu.entered?cu.diff:null)+'</tr>';
@@ -638,8 +662,15 @@ function vTrackPlan(){
 
 function vTrack(){return ui.trView==='report'?vTrackReport():ui.trView==='board'?vTrackBoard():vTrackPlan()}
 function NOMAP(u){return u.role==='admin'?'No department is mapped to the Academic tracker yet. Choose the departments, years and sections in Masters → Tracker mapping.':(u.role==='hod'&&!myDepts().length?'No department is linked to this account. Ask the administrator to set it in Masters → Users.':'No department is mapped to the Academic tracker yet. The administrator maps departments, years and sections in Masters → Tracker mapping.')}
+function unmappedNote(){
+  var u=me();if(!u||u.role!=='admin')return '';
+  var un=S.depts.filter(function(d){var cl=classesOf(d.id);return cl.length&&!cl.some(function(c){return c.tracked})});
+  var nc=S.depts.filter(function(d){return !classesOf(d.id).length});
+  if(!un.length&&!nc.length)return '';
+  return '<div class="alert a-info" role="note" style="margin:0 0 12px"><span class="aic" aria-hidden="true">i</span><div class="atx">'+(un.length?'<b>'+un.length+' department'+(un.length===1?' is':'s are')+' not shown in the tracker</b> because no year or section is mapped: '+un.map(function(d){return esc(d.code)}).join(', ')+'. ':'')+(nc.length?'<b>'+nc.length+' ha'+(nc.length===1?'s':'ve')+' no years or sections yet</b>: '+nc.map(function(d){return esc(d.code)}).join(', ')+'. Add them in Masters → Years &amp; sections. ':'')+'</div><div class="aact"><button class="btn primary sm" data-act="gomap">Map departments</button></div></div>';
+}
 function trNav(){
-  return '<div class="seg trnav" role="tablist" aria-label="Tracker views">'+[['plan','Weekly plan'],['report','Progress report'],['board','Leaderboard']].map(function(v){return '<button class="btn'+(ui.trView===v[0]?' on':'')+'" role="tab" aria-selected="'+(ui.trView===v[0])+'" data-act="trview" data-v="'+v[0]+'">'+v[1]+'</button>'}).join('')+'</div>';
+  return unmappedNote()+'<div class="seg trnav" role="tablist" aria-label="Tracker views">'+[['plan','Weekly plan'],['report','Progress report'],['board','Leaderboard']].map(function(v){return '<button class="btn'+(ui.trView===v[0]?' on':'')+'" role="tab" aria-selected="'+(ui.trView===v[0])+'" data-act="trview" data-v="'+v[0]+'">'+v[1]+'</button>'}).join('')+'</div>';
 }
 function pct(x){return x===null||x===undefined?'–':Math.round(x*100)+'%'}
 function tone(x){return x===null?'':x>=0.95?'ok':x>=0.8?'mid':'bad'}
@@ -770,7 +801,7 @@ function mTrack(){
     var on=cl.filter(function(c){return c.tracked}).length;
     return '<tr><td><label class="chk"><input type="checkbox" data-trk="d:'+d.id+'"'+(on===cl.length?' checked':'')+'> <b>'+esc(d.name)+'</b> <span class="tcode">'+esc(d.code)+'</span></label><div class="note">'+(on?on+' of '+cl.length+' sections in the tracker':'Not in the tracker')+'</div></td><td>'+yearsOf(cl).map(function(y){return '<div class="yrow"><span class="yl">Year '+y+'</span>'+cl.filter(function(c){return c.year===y}).map(function(c){return '<label class="chip'+(c.tracked?' on':'')+'"><input type="checkbox" data-trk="c:'+c.id+'"'+(c.tracked?' checked':'')+'> '+esc(c.section)+'</label>'}).join('')+'</div>'}).join('')+'</td></tr>';
   }).join('');
-  return '<div class="scroll"><table class="tbl"><thead><tr><th>Department</th><th>Years and sections shown in the Academic tracker</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+(S.classes.length?'':noMatch(0,'Add years and sections first in Masters → Years & sections.'));
+  return '<div class="rowhead" style="margin-bottom:10px"><span class="note">'+S.classes.filter(function(c){return c.tracked}).length+' of '+S.classes.length+' sections are in the tracker.</span><span><button class="btn sm primary" data-act="maptrk" data-v="all">Map every department</button> <button class="btn sm" data-act="maptrk" data-v="none">Clear all</button></span></div><div class="scroll"><table class="tbl"><thead><tr><th>Department</th><th>Years and sections shown in the Academic tracker</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+(S.classes.length?'':noMatch(0,'Add years and sections first in Masters → Years & sections.'));
 }
 function mLoads(){
   var L=loadList().filter(function(l){return hit(mfv('loads','q'),[l.name,l.kind])&&(!mfv('loads','kind')||l.kind===mfv('loads','kind'))});
@@ -1013,6 +1044,7 @@ function modalHTML(){
         fld('Lend to',lendToHTML(v.toWho))+fld('Name, only if “Someone else”',tin('forName',v.forName,'autocomplete="off"'))+fld('Purpose',tin('title',v.title,'required autocomplete="off" placeholder="Guest lecture, exam, workshop"'))+fld('Notes',tin('notes',v.notes,'placeholder="Equipment, seating, contact person"'));break}
     case 'vreq':{var vq=vreqModal(v);title=vq.title;extra=vq.extra;body=vq.body;break}
     case 'vdec':{var vd=vdecModal(v);title=vd.title;extra=vd.extra;body=vd.body;break}
+    case 'wkunlock':{title='Unlock week';extra='<p class="ctx">'+esc(trGroupLabel?(trIsGroup(ui.trClass)?trGroupLabel(ui.trClass):classLabel(v.ids[0])):classLabel(v.ids[0]))+' · week of '+fmtShort(v.w)+' – '+fmtShort(addD(v.w,4))+'</p><p class="note" style="margin:0">The head can update the plan and progress until the date you choose. After that the week locks again by itself.</p>';body=fld('Unlocked until',tin('until',v.until,'type="date" required'))+fld('Reason (optional)',tin('note',v.note,'autocomplete="off" placeholder="Late entry, corrected figures"'));break}
     case 'vrel':{var vl=vrelModal(v);title=vl.title;extra=vl.extra;body=vl.body;break}
     case 'book':{var r2=resById(v.resId);title='Book '+(r2?r2.name:'venue');
       extra='<p class="ctx">'+(r2?esc(r2.type)+' · '+r2.capacity+' seats · '+esc(locStr(r2)):'')+'</p>';
@@ -1020,7 +1052,7 @@ function modalHTML(){
       if(!canApprove())extra+='<p class="note" style="margin:0">Your request is sent to the head of institute. The slots are held until it is approved or declined.</p>';break}
   }
   var del=m.type==='tt'&&v.id?'<button type="button" class="btn danger" data-act="ttdel" data-id="'+v.id+'" style="margin-right:auto">Delete class</button>':'';
-  return '<div class="overlay" data-act="closeModal"><form class="modal" data-form="'+m.type+'" role="dialog" aria-modal="true" aria-label="'+esc(title)+'" novalidate><h2>'+esc(title)+'</h2>'+(m.err?'<p class="err" role="alert">'+esc(m.err)+'</p>':'')+extra+body+'<div class="mfoot">'+del+'<button type="button" class="btn" data-act="closeModal">Cancel</button><button type="submit" class="btn primary">'+(m.type==='book'?(canApprove()?'Confirm booking':'Send request'):m.type==='lend'?'Lend venue':m.type==='vreq'?'Send request':m.type==='vdec'?(v.decision==='approved'?'Approve':'Reject'):m.type==='vrel'?'Release venue':'Save')+'</button></div></form></div>';
+  return '<div class="overlay" data-act="closeModal"><form class="modal" data-form="'+m.type+'" role="dialog" aria-modal="true" aria-label="'+esc(title)+'" novalidate><h2>'+esc(title)+'</h2>'+(m.err?'<p class="err" role="alert">'+esc(m.err)+'</p>':'')+extra+body+'<div class="mfoot">'+del+'<button type="button" class="btn" data-act="closeModal">Cancel</button><button type="submit" class="btn primary">'+(m.type==='book'?(canApprove()?'Confirm booking':'Send request'):m.type==='lend'?'Lend venue':m.type==='vreq'?'Send request':m.type==='vdec'?(v.decision==='approved'?'Approve':'Reject'):m.type==='vrel'?'Release venue':m.type==='wkunlock'?'Unlock week':'Save')+'</button></div></form></div>';
 }
 
 /* ---------- render ---------- */
@@ -1077,7 +1109,7 @@ function submitForm(type,d){
     var yr=parseInt(v.year,10),secs=String(v.section||'').split(',').map(function(x){return x.trim().toUpperCase()}).filter(Boolean),stn=parseInt(v.strength,10)||0;
     if(!secs.length)return fail('Enter a section such as A.',d);
     if(v.id&&secs.length>1)return fail('Edit one section at a time.',d);
-    for(i=0;i<secs.length;i++){if(S.classes.some(function(x){return x.id!==v.id&&x.deptId===v.deptId&&x.year===yr&&x.section===secs[i]}))return fail(deptById(v.deptId).code+' '+yr+secs[i]+' already exists.',d)}
+    for(i=0;i<secs.length;i++){if(S.classes.some(function(x){return x.id!==v.id&&x.deptId===v.deptId&&x.year===yr&&x.section===secs[i]}))return fail(deptById(v.deptId).code+'-'+yr+'-'+secs[i]+' already exists.',d)}
     if(v.id){o=classById(v.id);if(o.deptId!==v.deptId&&S.tt.some(function(t){return t.classId===o.id}))return fail('This section has timetable classes. Clear them before moving it to another department.',d);o.deptId=v.deptId;o.year=yr;o.section=secs[0];o.strength=stn}
     else secs.forEach(function(sec){S.classes.push({id:uid('c'),deptId:v.deptId,year:yr,section:sec,strength:stn})});
     return done(secs.length>1?secs.length+' sections added.':'Year and section saved.');
@@ -1240,6 +1272,13 @@ function submitForm(type,d){
     S.vreqs.push({id:uid('q'),resId:qr.id,date:v.date,slotIds:qs.map(function(x){return x.id}),title:v.title,attendees:qa,reason:v.reason,fromDeptId:classById(v.classId).deptId,classId:v.classId,ownerDeptId:qr.deptId||null,releaseNote:'',releasedAt:'',ownerSeen:false,requesterSeen:true,requestedBy:me().name,requestedById:me().id,status:'pending',remarks:'',decidedBy:'',decidedAt:'',createdAt:new Date().toISOString(),eventId:''});
     return done('Request sent. You will see the decision under My requests.');
   }
+  if(type==='wkunlock'){
+    if(!v.until||v.until<today)return fail('Choose today or a later date.',d);
+    var wi=[].concat(v.ids||[]);
+    wi.forEach(function(cid3){var ex=S.unlocks.filter(function(x){return x.classId===cid3&&x.weekStart===v.w})[0];
+      if(ex){ex.until=v.until;ex.note=(v.note||'').trim()}else S.unlocks.push({id:uid('k'),classId:cid3,weekStart:v.w,until:v.until,note:(v.note||'').trim(),by:me().name})});
+    return done('Week unlocked until '+fmtLong(v.until)+'.');
+  }
   if(type==='vrel'){
     var rq2=S.vreqs.filter(function(x){return x.id===v.id})[0];v.releaseNote=(v.releaseNote||'').trim();
     if(!rq2||rq2.status!=='approved')return fail('Only an approved request can be released.',d);
@@ -1353,6 +1392,11 @@ document.addEventListener('click',function(e){
     case 'trclass':ui.trClass=d.id;window.scrollTo(0,0);break;
     case 'lend':openLend(d.res);return;
     case 'vreq':open('vreq',{resId:d.res,date:ui.rqDate,from:ui.rqFrom,to:ui.rqTo,title:'',attendees:'',reason:'',classId:ui.rqClass||''});return;
+    case 'gomap':ui.tab='masters';ui.mtab='track';window.scrollTo(0,0);break;
+    case 'maptrk':S.classes.forEach(function(c){c.tracked=d.v==='all'});save();toast(d.v==='all'?'Every year and section is now in the tracker.':'The tracker mapping was cleared.');break;
+    case 'trgo':ui.tab='track';ui.trView='plan';ui.trWeek=d.w;ui.trMonth=addD(d.w,4).slice(0,7);window.scrollTo(0,0);break;
+    case 'wkunlock':open('wkunlock',{w:d.w,ids:trIds(ui.trClass),until:addD(today,3),note:''});return;
+    case 'wklock':{var lids=trIds(ui.trClass);S.unlocks=S.unlocks.filter(function(x){return !(x.weekStart===d.w&&lids.indexOf(x.classId)>-1)});save();toast('Week locked again.');break}
     case 'vrelease':open('vrel',{id:d.id,releaseNote:''});return;
     case 'vrseen':{var vs=S.vreqs.filter(function(x){return x.id===d.id})[0];if(vs){if(d.side==='own')vs.ownerSeen=true;else if(d.side==='req')vs.requesterSeen=true;save()}break}
     case 'gotoreq':ui.tab=me().role==='admin'?'inbox':'venues';ui.vrView='inbox';window.scrollTo(0,0);break;
