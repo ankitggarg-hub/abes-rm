@@ -98,7 +98,7 @@ test('alerts: owner is alerted, requester releases an approved request, venue is
   assert.equal((await put(ece, 'vreqs', { upsert: [{ ...row, status: 'approved', remarks: 'ok' }] })).status, 200);
   row = (await data(cse)).vreqs.find((x) => x.id === 'rl1');
   assert.equal(row.requesterSeen, false);
-  assert.ok((await data(cse)).events.some((e) => e.id === row.eventId && e.title.includes('(CSE')));
+  assert.ok((await data(cse)).events.some((e) => e.id === row.eventId && e.title.includes('(CSE-')));
   assert.equal((await put(ece, 'vreqs', { upsert: [{ ...row, status: 'released', releaseNote: 'x' }] })).status, 403);
   assert.equal((await put(ece, 'vreqs', { upsert: [{ ...row, requesterSeen: true }] })).status, 403);
   assert.equal((await put(cse, 'vreqs', { upsert: [{ ...row, requesterSeen: true }] })).status, 200);
