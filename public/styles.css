@@ -400,3 +400,7 @@ main>*{min-width:0;max-width:100%}
 .a-ok{border-color:#16A34A;background:#F0FDF4}.a-ok .aic{background:#16A34A}
 .a-info{border-color:#2563EB;background:#EFF6FF}.a-info .aic{background:#2563EB}
 @media (max-width:640px){.alert{flex-wrap:wrap}.alert .aact{width:100%}}
+
+.trwk .wchip.lock{background:#FEE2E2;color:#B91C1C}
+.trwk .wchip.unl{background:#DCFCE7;color:#15803D}
+.trwk .wchip.due{background:#FEF3C7;color:#92400E}

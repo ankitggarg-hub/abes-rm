@@ -31,6 +31,14 @@ test('department heads plan only their own sections; stakeholders see nothing', 
   const d = (await app.call('GET', '/api/data', { cookie: admin })).body.data;
   const cseClass = d.classes.find((c) => c.deptId === 'd_cse').id;
   const row = { id: 'wp1', classId: cseClass, weekStart: '2026-03-02', loadId: 'l_theory', planned: 14.5, actual: null };
+  // the week closed long ago, so it is locked until an administrator unlocks it
+  const locked = await put(cse, 'wplans', { upsert: [row] });
+  assert.equal(locked.status, 403);
+  assert.match(locked.body.error, /locked/);
+  const ul = { id: 'ul1', classId: cseClass, weekStart: '2026-03-02', until: '2099-01-01', note: 'Late entry' };
+  assert.equal((await put(cse, 'unlocks', { upsert: [ul] })).status, 403); // heads cannot unlock
+  assert.equal((await put(admin, 'unlocks', { upsert: [ul] })).status, 200);
+  assert.equal((await app.call('GET', '/api/data', { cookie: cse })).body.data.unlocks.length, 1);
   assert.equal((await put(cse, 'wplans', { upsert: [row] })).status, 200);
   assert.equal((await put(ece, 'wplans', { upsert: [{ ...row, id: 'wp2' }] })).status, 403);
   assert.equal((await put(ece, 'wplans', { remove: ['wp1'] })).status, 403);
@@ -83,4 +91,28 @@ test('off days: admin for the whole campus or one section, heads only for their 
 test('a load type in use cannot be deleted', async () => {
   const r = await put(admin, 'loads', { remove: ['l_theory'] });
   assert.equal(r.status, 409);
+});
+
+test('a week locks after the Monday that follows it', async () => {
+  const d = (await app.call('GET', '/api/data', { cookie: admin })).body.data;
+  const cls = d.classes.find((c) => c.deptId === 'd_cse').id;
+  const ist = new Date(Date.now() + 5.5 * 3600e3);
+  const dow = ist.getUTCDay();
+  const mon = new Date(ist); mon.setUTCDate(mon.getUTCDate() - (dow === 0 ? 6 : dow - 1));
+  const back = (n) => { const x = new Date(mon); x.setUTCDate(x.getUTCDate() - n); return iso(x); };
+  // two weeks ago closed last Monday: locked. Last week closes this Monday: open today only if today is Monday.
+  const OLDWK = '2026-02-02';
+  const old = { id: 'lk1', classId: cls, weekStart: OLDWK, loadId: 'l_tut', planned: 4, actual: null };
+  const r1 = await put(cse, 'wplans', { upsert: [old] });
+  assert.equal(r1.status, 403);
+  assert.equal((await put(admin, 'wplans', { upsert: [old] })).status, 200); // the administrator is never locked
+  assert.equal((await put(cse, 'wplans', { upsert: [{ ...old, planned: 5 }] })).status, 403);
+  assert.equal((await put(cse, 'wplans', { remove: ['lk1'] })).status, 403);
+  assert.equal((await put(admin, 'unlocks', { upsert: [{ id: 'ul2', classId: cls, weekStart: OLDWK, until: iso(ist) }] })).status, 200);
+  assert.equal((await put(cse, 'wplans', { upsert: [{ ...old, planned: 5 }] })).status, 200);
+  // an unlock that has expired no longer helps
+  assert.equal((await put(admin, 'unlocks', { upsert: [{ id: 'ul2', classId: cls, weekStart: OLDWK, until: back(1) }] })).status, 200);
+  assert.equal((await put(cse, 'wplans', { upsert: [{ ...old, planned: 6 }] })).status, 403);
+  // a week that is still open can be changed
+  assert.equal((await put(cse, 'wplans', { upsert: [{ id: 'lk2', classId: cls, weekStart: back(0), loadId: 'l_tut', planned: 3, actual: null }] })).status, back(0) === '2026-10-05' ? 409 : 200);
 });

@@ -211,3 +211,31 @@ ALTER TABLE venue_requests ADD COLUMN IF NOT EXISTS owner_seen      boolean NOT 
 ALTER TABLE venue_requests ADD COLUMN IF NOT EXISTS requester_seen  boolean NOT NULL DEFAULT true;
 ALTER TABLE venue_requests DROP CONSTRAINT IF EXISTS venue_requests_status_check;
 ALTER TABLE venue_requests ADD CONSTRAINT venue_requests_status_check CHECK (status IN ('pending','approved','rejected','cancelled','released'));
+
+-- Academic tracker: a week locks after the Monday that follows it. Only an administrator can unlock it (safe to re-run)
+CREATE TABLE IF NOT EXISTS tracker_unlocks (
+  id         text PRIMARY KEY,
+  class_id   text NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  week_start date NOT NULL,
+  until      date NOT NULL,
+  note       text NOT NULL DEFAULT '',
+  by_name    text NOT NULL DEFAULT '',
+  CONSTRAINT tracker_unlocks_unique UNIQUE (class_id, week_start)
+);
+
+-- Activity log: who did what and when (administrators can read it; nothing in the app edits or deletes entries)
+CREATE TABLE IF NOT EXISTS activity_log (
+  id        bigserial PRIMARY KEY,
+  at        timestamptz NOT NULL DEFAULT now(),
+  user_id   text NOT NULL DEFAULT '',
+  user_name text NOT NULL DEFAULT '',
+  role      text NOT NULL DEFAULT '',
+  action    text NOT NULL,
+  entity    text NOT NULL DEFAULT '',
+  entity_id text NOT NULL DEFAULT '',
+  summary   text NOT NULL DEFAULT '',
+  detail    jsonb NOT NULL DEFAULT '{}'::jsonb
+);
+CREATE INDEX IF NOT EXISTS activity_log_at ON activity_log (at DESC);
+CREATE INDEX IF NOT EXISTS activity_log_user ON activity_log (user_id, at DESC);
+CREATE INDEX IF NOT EXISTS activity_log_entity ON activity_log (entity, at DESC);

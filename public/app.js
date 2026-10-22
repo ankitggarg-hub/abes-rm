@@ -102,7 +102,7 @@ function updateSync(){var el=document.getElementById('sync');if(el)el.innerHTML=
 
 var today=iso(new Date());
 var ui={booting:true,loginErr:'',loginBusy:false,userId:null,tab:'overview',mtab:'depts',ttDept:null,ttRes:null,ttMode:'week',ttDay:0,
-  dbDate:today,dbFrom:null,dbTo:null,dbBld:'',dbFl:'',dbType:'',trDept:null,trView:'plan',rpDept:null,rpPeriod:'all',rpKind:'',trClass:'',trWeek:mondayOf(today),trMonth:today.slice(0,7),avDate:today,lnDate:today,lnFrom:null,lnTo:null,lnType:'',rqDate:today,rqFrom:null,rqTo:null,rqType:'',rqDept:'',avFrom:null,avTo:null,avType:'',avCap:'',avBld:'',avFl:'',mf:{},chDept:null,chClass:'',chFrom:today,chTo:today,chSlotA:'',chSlotB:'',chReason:'Industrial visit',chNote:'',modal:null,confirm:null,evShowPast:false};
+  dbDate:today,dbFrom:null,dbTo:null,dbBld:'',dbFl:'',dbType:'',trDept:null,trView:'plan',rpDept:null,rpPeriod:'all',rpKind:'',trClass:'',trWeek:mondayOf(today),trMonth:today.slice(0,7),avDate:today,lnDate:today,lnFrom:null,lnTo:null,lnType:'',auF:{q:'',user:'',entity:'',action:'',from:'',to:''},auRows:[],auTotal:0,auBusy:false,auErr:'',auOpen:{},rqDate:today,rqFrom:null,rqTo:null,rqType:'',rqDept:'',avFrom:null,avTo:null,avType:'',avCap:'',avBld:'',avFl:'',mf:{},chDept:null,chClass:'',chFrom:today,chTo:today,chSlotA:'',chSlotB:'',chReason:'Industrial visit',chNote:'',modal:null,confirm:null,evShowPast:false};
 
 /* ---------- selectors ---------- */
 var slotList=function(){return S.slots.slice().sort(function(a,b){return a.start.localeCompare(b.start)})};
@@ -224,7 +224,7 @@ function tabsFor(r){
   var inbox=vrAlerts().length;
   var rq=['inbox','Venue requests'+(inbox?'<span class="count">'+inbox+'</span>':'')];
   var ev=['events','Events'+(canApprove()&&pend?'<span class="count">'+pend+'</span>':'')];
-  if(r==='admin')return [['overview','Overview'],['avail','Availability'],ev,['timetable','Timetables'],['classes','Rooms by class'],['changes','Class changes'],['track','Academic tracker'],rq,['masters','Masters']];
+  if(r==='admin')return [['overview','Overview'],['avail','Availability'],ev,['timetable','Timetables'],['classes','Rooms by class'],['changes','Class changes'],['track','Academic tracker'],rq,['audit','Activity log'],['masters','Masters']];
   if(r==='hod')return [['overview','Overview'],['timetable','My timetable'],['changes','Class changes'],['classes','Rooms by class'],['avail','Availability'],['venues','Venue requests'+(inbox?'<span class="count">'+inbox+'</span>':'')],['track','Academic tracker'],ev];
   if(r==='head')return [['overview','Overview'],['avail','Find a venue'],['changes','Class changes'],['classes','Rooms by class'],['track','Academic tracker'],ev];
   if(r==='viewer')return [['dash','Dashboard'],['avail','Find a venue']];
@@ -467,6 +467,55 @@ function vVenues(){
   var v=ui.vrView||(pend?'inbox':'request');
   var nav='<div class="seg trnav" role="tablist" aria-label="Venue requests">'+[['request','Request a venue'],['inbox','Requests to decide'+(pend?' ('+pend+')':'')],['lend','Lend my venue']].map(function(x){return '<button class="btn'+(v===x[0]?' on':'')+'" role="tab" aria-selected="'+(v===x[0])+'" data-act="vrview" data-v="'+x[0]+'">'+x[1]+'</button>'}).join('')+'</div>';
   return nav+(v==='inbox'?vInbox():v==='lend'?vLend():vBorrow());
+}
+/* ---------- activity log (administrator) ---------- */
+var AU_ENT={depts:'Department',classes:'Year & section',slots:'Period',buildings:'Building',floors:'Floor',resources:'Venue',users:'User',tt:'Timetable class',releases:'Class change',events:'Event / booking',vreqs:'Venue request',loads:'Load type',holidays:'Off day',wplans:'Weekly plan',unlocks:'Tracker unlock',session:'Sign-in'};
+var AU_ACT={create:['b-ok','Added'],update:['b-wait','Changed'],delete:['b-no','Deleted'],login:['b-ok','Sign-in'],login_failed:['b-no','Failed sign-in'],logout:['b-wait','Sign-out'],denied:['b-no','Refused']};
+function auQuery(offset,limit){
+  var f=ui.auF,p=[];['q','user','entity','action','from','to'].forEach(function(k){if(f[k])p.push(k+'='+encodeURIComponent(f[k]))});
+  p.push('limit='+limit,'offset='+offset);return '/api/audit?'+p.join('&');
+}
+function loadAudit(reset){
+  if(ui.auBusy)return;ui.auBusy=true;ui.auErr='';if(reset){ui.auRows=[];ui.auTotal=0}render();
+  api('GET',auQuery(reset?0:ui.auRows.length,50)).then(function(r){ui.auRows=reset?r.rows:ui.auRows.concat(r.rows);ui.auTotal=r.total;ui.auBusy=false;render()}).catch(function(e){ui.auBusy=false;ui.auErr=e.message;render()});
+}
+function auCsv(){
+  api('GET',auQuery(0,1000)).then(function(r){
+    var q=function(v){v=String(v==null?'':v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+    var out=[['When (IST)','User','Role','Action','What','Summary','Details'].join(',')];
+    r.rows.forEach(function(x){out.push([auWhen(x.at),x.userName,x.role,(AU_ACT[x.action]||[0,x.action])[1],AU_ENT[x.entity]||x.entity,x.summary,JSON.stringify(x.detail)].map(q).join(','))});
+    var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([out.join('\n')],{type:'text/csv'}));a.download='activity-log.csv';document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},500);
+    toast('Downloaded '+r.rows.length+' entr'+(r.rows.length===1?'y':'ies')+(r.total>r.rows.length?' (the newest 1000 of '+r.total+')':'')+'.');
+  }).catch(function(e){toast(e.message,true)});
+}
+function auWhen(t){return new Date(t).toLocaleString('en-IN',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:'Asia/Kolkata'})}
+function auDetail(x){
+  var d=x.detail||{},h='';
+  if(d.changes)h+='<table class="tbl"><thead><tr><th>Field</th><th>Before</th><th>After</th></tr></thead><tbody>'+Object.keys(d.changes).map(function(k){var c=d.changes[k];return '<tr><td class="mono">'+esc(k)+'</td><td>'+esc(auV(c[0]))+'</td><td>'+esc(auV(c[1]))+'</td></tr>'}).join('')+'</tbody></table>';
+  if(d.device)h+='<div class="note">Device: '+esc(d.device)+'</div>';
+  var rec=d.after||d.before;
+  if(rec)h+='<div class="note" style="margin:6px 0 2px">'+(d.after?'Saved values':'Values before deletion')+(d.via?' · '+esc(d.via):'')+'</div><div class="mono" style="font-size:12px;word-break:break-word">'+Object.keys(rec).map(function(k){return esc(k)+': '+esc(auV(rec[k]))}).join(' · ')+'</div>';
+  return h||'<span class="note">No further details.</span>';
+}
+function auV(v){return v===null||v===undefined||v===''?'–':Array.isArray(v)?v.join(', '):typeof v==='object'?JSON.stringify(v):String(v)}
+function vAudit(){
+  var head='<div class="head"><div><h2>Activity log</h2><p>Every change, sign-in, failed sign-in and refused change, with who did it and when. Entries cannot be edited or deleted and are kept for 18 months. Times are India time.</p></div></div>';
+  if(me().role!=='admin')return head+emptyBox('Only administrators can read the activity log.');
+  var f=ui.auF;
+  var users=S.users.slice().sort(function(a,b){return a.name.localeCompare(b.name)});
+  var filters='<div class="panel"><div class="filters">'+
+    '<label>Search<input id="au-q" value="'+esc(f.q)+'" placeholder="Name, section, venue, value…"></label>'+
+    '<label>User<select id="au-user"><option value="">Everyone</option>'+users.map(function(u){return '<option value="'+esc(u.id)+'"'+(f.user===u.id?' selected':'')+'>'+esc(u.name)+'</option>'}).join('')+'</select></label>'+
+    '<label>What<select id="au-entity"><option value="">Everything</option>'+Object.keys(AU_ENT).map(function(k){return '<option value="'+k+'"'+(f.entity===k?' selected':'')+'>'+AU_ENT[k]+'</option>'}).join('')+'</select></label>'+
+    '<label>Action<select id="au-action"><option value="">All actions</option>'+Object.keys(AU_ACT).map(function(k){return '<option value="'+k+'"'+(f.action===k?' selected':'')+'>'+AU_ACT[k][1]+'</option>'}).join('')+'</select></label>'+
+    '<label>From<input type="date" id="au-from" value="'+esc(f.from)+'"></label><label>To<input type="date" id="au-to" value="'+esc(f.to)+'"></label>'+
+    '<button class="btn primary sm" data-act="auapply">Search</button><button class="btn sm" data-act="aureset">Reset</button><button class="btn sm" data-act="aucsv">Download CSV</button></div></div>';
+  var rows=ui.auRows.map(function(x){
+    var a=AU_ACT[x.action]||['b-wait',x.action],open=ui.auOpen[x.id];
+    return '<tr><td class="mono" style="white-space:nowrap">'+esc(auWhen(x.at))+'</td><td><b>'+esc(x.userName||'–')+'</b><div class="note">'+esc(ROLE[x.role]||x.role||'')+'</div></td><td><span class="badge '+a[0]+'">'+a[1]+'</span></td><td>'+(x.entity?'<span class="note">'+esc(AU_ENT[x.entity]||x.entity)+'</span><br>':'')+esc(x.summary)+(open?'<div style="margin-top:8px">'+auDetail(x)+'</div>':'')+'</td><td class="act"><button class="btn sm" data-act="auopen" data-id="'+x.id+'">'+(open?'Hide':'Details')+'</button></td></tr>';
+  }).join('');
+  var body=ui.auErr?'<p class="err">'+esc(ui.auErr)+'</p>':ui.auRows.length?'<div class="scroll"><table class="tbl"><thead><tr><th>When</th><th>User</th><th>Action</th><th>What happened</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div><p class="note" style="margin:8px 0">Showing '+ui.auRows.length+' of '+ui.auTotal+'.'+(ui.auRows.length<ui.auTotal?' <button class="btn sm" data-act="aumore">Show more</button>':'')+'</p>':emptyBox(ui.auBusy?'Loading…':'No entries match.');
+  return head+filters+'<section>'+body+'</section>';
 }
 function vBorrow(){
   var u=me(),md=myDepts(),sl=slotList();
@@ -1076,7 +1125,7 @@ function render(){
   head.innerHTML='<div class="bar">'+brand+
     '<div class="who"><span id="sync" class="syncwrap"></span><span class="me" title="'+esc(u.email)+'"><b>'+esc(u.name)+'</b> · '+ROLE[u.role]+'</span><button class="btn sm" data-act="logout">Sign out</button><button class="btn sm" data-act="logoutall" title="Sign out on every device where you are signed in">Sign out everywhere</button></div></div>'+
     '<nav class="tabs" role="tablist" aria-label="Sections">'+tabs.map(function(t){return '<button class="tab" role="tab" aria-selected="'+(t[0]===ui.tab)+'" data-act="tab" data-v="'+t[0]+'">'+t[1]+'</button>'}).join('')+'</nav>';
-  document.getElementById('main').innerHTML={dash:function(){return '<div class="head"><div><h2>Available venues</h2><p>See which venues are free on a day and time.</p></div></div>'+vDashAvail()},overview:vOverview,avail:vAvail,events:vEvents,venues:vVenues,inbox:vInbox,track:vTrack,timetable:vTimetable,classes:vClasses,changes:vChanges,masters:vMasters}[ui.tab]();
+  document.getElementById('main').innerHTML={dash:function(){return '<div class="head"><div><h2>Available venues</h2><p>See which venues are free on a day and time.</p></div></div>'+vDashAvail()},overview:vOverview,avail:vAvail,events:vEvents,venues:vVenues,inbox:vInbox,audit:vAudit,track:vTrack,timetable:vTimetable,classes:vClasses,changes:vChanges,masters:vMasters}[ui.tab]();
   document.getElementById('modalRoot').innerHTML=modalHTML();
   document.getElementById('foot').innerHTML='<span>Signed in as '+esc(u.email||u.name)+'</span>';
   updateSync();
@@ -1357,7 +1406,12 @@ document.addEventListener('click',function(e){
     case 'logoutall':api('POST','/api/auth/logout-all').catch(function(){}).then(function(){signedOut()});return;
     case 'logout':api('POST','/api/auth/logout').catch(function(){}).then(function(){signedOut()});return;
     case 'syncnow':save();break;
-    case 'tab':ui.tab=d.v;break;
+    case 'tab':ui.tab=d.v;if(d.v==='audit')loadAudit(true);break;
+    case 'auapply':{['q','user','entity','action','from','to'].forEach(function(k){var el=document.getElementById('au-'+k);if(el)ui.auF[k]=el.value});loadAudit(true);return}
+    case 'aureset':ui.auF={q:'',user:'',entity:'',action:'',from:'',to:''};loadAudit(true);return;
+    case 'aumore':loadAudit(false);return;
+    case 'auopen':ui.auOpen[d.id]=!ui.auOpen[d.id];break;
+    case 'aucsv':auCsv();return;
     case 'mfclear':Object.keys(ui.mf).forEach(function(k){if(k.indexOf(d.t+'.')===0)delete ui.mf[k]});break;
     case 'dbtype':ui.dbType=ui.dbType===d.t?'':d.t;break;
     case 'dbday':ui.dbDate=d.n==='0'?today:addDays(ui.dbDate,+d.n);break;
