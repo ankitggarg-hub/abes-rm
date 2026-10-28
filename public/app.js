@@ -694,9 +694,9 @@ function vTrackPlan(){
       ids.forEach(function(id){var r=planRow(id,w,l.id),pp=r?r.planned:0,aa=r&&r.actual!==undefined&&r.actual!==null?r.actual:null;psum+=pp;if(aa!==null){asum+=aa;dsum+=aa-pp;anum++}});
       var pAvg=psum/n;tp+=pAvg;LM[l.id].p+=pAvg;
       if(anum){ta+=asum/n;td+=dsum/n;tn++;LM[l.id].a+=asum/n;LM[l.id].d+=dsum/n;LM[l.id].n++}
-      var pc=editW?'<input class="hrs" type="number" min="0" max="100" step="0.5" inputmode="decimal" value="'+(cv.pMixed?'':(cv.p?cv.p:''))+'" placeholder="'+(cv.pMixed?'mixed':'0')+'" data-tr="'+(grp?ui.trClass:cid)+'|'+l.id+'|planned|'+w+'" aria-label="Planned hours, '+esc(l.name)+', week of '+fmtShort(w)+'">':'<span class="mono">'+(cv.pMixed?'mixed':(cv.p||'–'))+'</span>';
+      var pc=editW?'<input class="hrs" type="text" inputmode="decimal" maxlength="4" autocomplete="off" value="'+(cv.pMixed?'':(cv.p?cv.p:''))+'" placeholder="'+(cv.pMixed?'mixed':'0')+'" data-tr="'+(grp?ui.trClass:cid)+'|'+l.id+'|planned|'+w+'" aria-label="Planned hours, '+esc(l.name)+', week of '+fmtShort(w)+'">':'<span class="mono">'+(cv.pMixed?'mixed':(cv.p||'–'))+'</span>';
       var tone=anum&&!cv.pMixed&&!cv.aMixed&&cv.a!==null?(rnd1(cv.a-cv.p)===0?' ok':' bad'):'';
-      var ac=(editW&&!grp)?'<input class="hrs" type="number" min="0" max="100" step="0.5" inputmode="decimal" value="'+(cv.a===null?'':cv.a)+'" placeholder="'+(open?'hrs':'–')+'"'+(open?'':' disabled title="Opens on the last working day of this week"')+' data-tr="'+cid+'|'+l.id+'|actual|'+w+'" aria-label="Actual hours, '+esc(l.name)+', week of '+fmtShort(w)+'">':'<span class="mono">'+(cv.aMixed?'mixed':(cv.a===null?'–':cv.a))+'</span>';
+      var ac=(editW&&!grp)?'<input class="hrs" type="text" inputmode="decimal" maxlength="4" autocomplete="off" value="'+(cv.a===null?'':cv.a)+'" placeholder="'+(open?'hrs':'–')+'"'+(open?'':' disabled title="Opens on the last working day of this week"')+' data-tr="'+cid+'|'+l.id+'|actual|'+w+'" aria-label="Actual hours, '+esc(l.name)+', week of '+fmtShort(w)+'">':'<span class="mono">'+(cv.aMixed?'mixed':(cv.a===null?'–':cv.a))+'</span>';
       tds+='<td class="wp'+(f.start?' gs':'')+cur+'">'+pc+'</td><td class="wa'+tone+cur+'">'+ac+(tone?'<small class="vb">'+(tone===' ok'?'✓':sgn(cv.a-cv.p))+'</small>':'')+'</td>';
     });
     gMP+=tp;gMA+=ta;gMD+=td;gMN+=tn;
@@ -706,7 +706,7 @@ function vTrackPlan(){
     else if(ulk)chip+=' <span class="wchip unl">Unlocked until '+fmtShort(ulk.until)+'</span>'+(adm?' <button class="btn sm" data-act="wklock" data-w="'+w+'">Lock again</button>':'');
     else if(today<=wkDeadline(w)&&addD(w,6)<today)chip+=' <span class="wchip due">Update by Mon '+fmtShort(wkDeadline(w))+'</span>';
     var tt=tn?(rnd1(td)===0?' ok':' bad'):'';
-    rows+='<tr class="'+(isSel?'cur':'')+'"><td class="wk0"><button class="link" data-act="trwk" data-w="'+w+'">'+fmtShort(w)+' – '+fmtShort(addD(w,4))+'</button> '+chip+'</td>'+tds+
+    rows+='<tr class="'+(isSel?'cur':'')+'"><td class="wk0"><button class="link" data-act="trwk" data-w="'+w+'">'+fmtShort(w)+' – '+fmtShort(addD(w,4))+'</button><div class="wchips">'+chip+'</div></td>'+tds+
       '<td class="mono mon">'+rnd1(tp)+'</td><td class="mono mon'+tt+'">'+(tn?rnd1(ta):'–')+'</td>'+varCell(0,tn?rnd1(td):null,' mon')+'</tr>';
   });
   var mt='',mv='';
@@ -1507,6 +1507,10 @@ document.addEventListener('click',function(e){
       if(ui.confirm===d.k){ui.confirm=null;tryDelete(d.k)}else ui.confirm=d.k;break;
   }
   render();
+});
+document.addEventListener('input',function(e){
+  var hi=e.target.closest&&e.target.closest('input.hrs');
+  if(hi){var cl=hi.value.replace(/[^0-9.]/g,'').replace(/^(\d{0,2})(\d*)/,'$1$2').replace(/(\..*)\./,'$1');var m=cl.match(/^(\d{0,2})(\.\d?)?/);cl=m?(m[1]+(m[2]||'')):'';if(cl!==hi.value)hi.value=cl}
 });
 document.addEventListener('change',function(e){
   var mfs=e.target.closest('select[data-mf]');if(mfs){ui.mf[mfs.dataset.mf]=mfs.value;render();return}

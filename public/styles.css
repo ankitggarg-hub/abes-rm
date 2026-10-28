@@ -409,3 +409,11 @@ main>*{min-width:0;max-width:100%}
 .savebar{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:40;display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:center;max-width:calc(100vw - 24px);padding:10px 14px;border-radius:12px;background:#0A2E73;color:#fff;box-shadow:0 10px 30px rgba(10,46,115,.35)}
 .savebar .btn{border-color:rgba(255,255,255,.4)}
 .savebar .btn:not(.primary){background:transparent;color:#fff}.savebar .btn:not(.primary):hover{background:rgba(255,255,255,.15)}
+
+/* compact tracker inputs */
+.trwk input.hrs{width:46px;padding:5px 4px;text-align:center;font-size:14px}
+.trwk td{padding:6px 5px}
+.trwk td.wp,.trwk td.wa{min-width:54px}
+.trwk th.wk0,.trwk td.wk0{min-width:130px}
+.trwk .wchips{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;align-items:center}
+.trwk .wchips .wchip{margin-left:0}
