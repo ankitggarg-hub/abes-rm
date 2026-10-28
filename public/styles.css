@@ -404,3 +404,8 @@ main>*{min-width:0;max-width:100%}
 .trwk .wchip.lock{background:#FEE2E2;color:#B91C1C}
 .trwk .wchip.unl{background:#DCFCE7;color:#15803D}
 .trwk .wchip.due{background:#FEF3C7;color:#92400E}
+
+.trwk input.hrs.dirty{border-color:#F59E0B;background:#FFFBEB;box-shadow:0 0 0 2px rgba(245,158,11,.25)}
+.savebar{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:40;display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:center;max-width:calc(100vw - 24px);padding:10px 14px;border-radius:12px;background:#0A2E73;color:#fff;box-shadow:0 10px 30px rgba(10,46,115,.35)}
+.savebar .btn{border-color:rgba(255,255,255,.4)}
+.savebar .btn:not(.primary){background:transparent;color:#fff}.savebar .btn:not(.primary):hover{background:rgba(255,255,255,.15)}
