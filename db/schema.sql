@@ -239,3 +239,55 @@ CREATE TABLE IF NOT EXISTS activity_log (
 CREATE INDEX IF NOT EXISTS activity_log_at ON activity_log (at DESC);
 CREATE INDEX IF NOT EXISTS activity_log_user ON activity_log (user_id, at DESC);
 CREATE INDEX IF NOT EXISTS activity_log_entity ON activity_log (entity, at DESC);
+
+
+-- Programmes, terms and subjects; fortnightly syllabus tracker (safe to re-run)
+CREATE TABLE IF NOT EXISTS programmes (
+  id        text PRIMARY KEY,
+  code      text NOT NULL UNIQUE,
+  name      text NOT NULL,
+  semesters int  NOT NULL CHECK (semesters BETWEEN 1 AND 12)
+);
+ALTER TABLE departments ADD COLUMN IF NOT EXISTS programme_id text REFERENCES programmes(id) ON DELETE SET NULL;
+
+CREATE TABLE IF NOT EXISTS terms (
+  id         text PRIMARY KEY,
+  session    text NOT NULL,
+  kind       text NOT NULL CHECK (kind IN ('odd','even')),
+  start_date date NOT NULL,
+  end_date   date NOT NULL CHECK (end_date >= start_date),
+  CONSTRAINT terms_unique UNIQUE (session, kind)
+);
+
+CREATE TABLE IF NOT EXISTS subjects (
+  id           text PRIMARY KEY,
+  code         text NOT NULL,
+  name         text NOT NULL,
+  programme_id text NOT NULL REFERENCES programmes(id) ON DELETE CASCADE,
+  dept_id      text REFERENCES departments(id) ON DELETE CASCADE,
+  semester     int  NOT NULL CHECK (semester BETWEEN 1 AND 12),
+  type         text NOT NULL DEFAULT 'Theory' CHECK (type IN ('Theory','Lab','Training')),
+  units        int  NOT NULL DEFAULT 5 CHECK (units BETWEEN 1 AND 30)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS subjects_code_unique ON subjects (programme_id, COALESCE(dept_id, ''), code);
+
+CREATE TABLE IF NOT EXISTS syllabus_progress (
+  id              text PRIMARY KEY,
+  class_id        text NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  subject_id      text NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+  fortnight_start date NOT NULL,
+  units_done      int  NOT NULL DEFAULT 0 CHECK (units_done BETWEEN 0 AND 30),
+  pct             int  NOT NULL DEFAULT 0 CHECK (pct BETWEEN 0 AND 100),
+  remark          text NOT NULL DEFAULT '',
+  CONSTRAINT syllabus_unique UNIQUE (class_id, subject_id, fortnight_start)
+);
+
+CREATE TABLE IF NOT EXISTS syllabus_unlocks (
+  id              text PRIMARY KEY,
+  class_id        text NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  fortnight_start date NOT NULL,
+  until           date NOT NULL,
+  note            text NOT NULL DEFAULT '',
+  by_name         text NOT NULL DEFAULT '',
+  CONSTRAINT syllabus_unlocks_unique UNIQUE (class_id, fortnight_start)
+);
