@@ -17,7 +17,7 @@ var toMin=function(t){var p=t.split(':');return +p[0]*60+ +p[1]};
 var uid=function(p){return p+Math.random().toString(36).slice(2,8)};
 
 /* ---------- state ---------- */
-var KEYS=['depts','classes','slots','buildings','floors','resources','users','tt','releases','events','vreqs','loads','holidays','wplans','unlocks'];
+var KEYS=['programmes','depts','classes','slots','buildings','floors','resources','users','tt','releases','events','vreqs','loads','holidays','wplans','unlocks','terms','subjects','syllabus','sunlocks'];
 var LOAD_KINDS=['Academic','Training'];
 function emptyState(){var o={};KEYS.forEach(function(k){o[k]=[]});return o}
 var S=emptyState();
@@ -103,7 +103,7 @@ function updateSync(){var el=document.getElementById('sync');if(el)el.innerHTML=
 
 var today=iso(new Date());
 var ui={booting:true,loginErr:'',loginBusy:false,userId:null,tab:'overview',mtab:'depts',ttDept:null,ttRes:null,ttMode:'week',ttDay:0,
-  dbDate:today,dbFrom:null,dbTo:null,dbBld:'',dbFl:'',dbType:'',trDept:null,trView:'plan',rpDept:null,rpPeriod:'all',rpKind:'',trClass:'',trWeek:mondayOf(today),trMonth:today.slice(0,7),avDate:today,lnDate:today,lnFrom:null,lnTo:null,lnType:'',trDraft:{},trPending:null,auF:{q:'',user:'',entity:'',action:'',from:'',to:''},auRows:[],auTotal:0,auBusy:false,auErr:'',auOpen:{},rqDate:today,rqFrom:null,rqTo:null,rqType:'',rqDept:'',avFrom:null,avTo:null,avType:'',avCap:'',avBld:'',avFl:'',mf:{},chDept:null,chClass:'',chFrom:today,chTo:today,chSlotA:'',chSlotB:'',chReason:'Industrial visit',chNote:'',modal:null,confirm:null,evShowPast:false};
+  dbDate:today,dbFrom:null,dbTo:null,dbBld:'',dbFl:'',dbType:'',trDept:null,trView:'plan',rpDept:null,rpPeriod:'all',rpKind:'',trClass:'',trWeek:mondayOf(today),trMonth:today.slice(0,7),avDate:today,lnDate:today,lnFrom:null,lnTo:null,lnType:'',navOpen:{},navDrawer:false,trDraft:{},trPending:null,auF:{q:'',user:'',entity:'',action:'',from:'',to:''},auRows:[],auTotal:0,auBusy:false,auErr:'',auOpen:{},rqDate:today,rqFrom:null,rqTo:null,rqType:'',rqDept:'',avFrom:null,avTo:null,avType:'',avCap:'',avBld:'',avFl:'',mf:{},chDept:null,chClass:'',chFrom:today,chTo:today,chSlotA:'',chSlotB:'',chReason:'Industrial visit',chNote:'',modal:null,confirm:null,evShowPast:false};
 
 /* ---------- selectors ---------- */
 var slotList=function(){return S.slots.slice().sort(function(a,b){return a.start.localeCompare(b.start)})};
@@ -220,16 +220,67 @@ function ensure(){
   if(!ui.rqTo||!slotById(ui.rqTo))ui.rqTo=ui.avTo;
   if(!ui.ttDept||!deptById(ui.ttDept))ui.ttDept=S.depts.length?S.depts[0].id:null;
 }
-function tabsFor(r){
-  var pend=S.events.filter(function(e){return e.status==='pending'}).length;
-  var inbox=vrAlerts().length;
-  var rq=['inbox','Venue requests'+(inbox?'<span class="count">'+inbox+'</span>':'')];
-  var ev=['events','Events'+(canApprove()&&pend?'<span class="count">'+pend+'</span>':'')];
-  if(r==='admin')return [['overview','Overview'],['avail','Availability'],ev,['timetable','Timetables'],['classes','Rooms by class'],['changes','Class changes'],['track','Academic tracker'],rq,['audit','Activity log'],['masters','Masters']];
-  if(r==='hod')return [['overview','Overview'],['timetable','My timetable'],['changes','Class changes'],['classes','Rooms by class'],['avail','Availability'],['venues','Venue requests'+(inbox?'<span class="count">'+inbox+'</span>':'')],['track','Academic tracker'],ev];
-  if(r==='head')return [['overview','Overview'],['avail','Find a venue'],['changes','Class changes'],['classes','Rooms by class'],['track','Academic tracker'],ev];
-  if(r==='viewer')return [['dash','Dashboard'],['avail','Find a venue']];
-  return [['overview','Overview'],['classes','Rooms by class'],['avail','Find a venue'],ev];
+var NAVI={
+  grid:'<path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/>',
+  building:'<path d="M4 21V5l8-3 8 3v16M9 21v-5h6v5M8 9h2M14 9h2M8 13h2M14 13h2"/>',
+  cal:'<path d="M3 5h18v16H3zM3 10h18M8 3v4M16 3v4"/>',
+  chart:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+  book:'<path d="M4 4h10a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4zM4 16a4 4 0 0 1 4-4h10"/>',
+  shield:'<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/>',
+  sliders:'<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M14 4v4M8 10v4M16 16v4"/>'
+};
+function curVr(){var pend=S.vreqs.filter(function(q){return q.status==='pending'&&q.date>=today&&myDepts().indexOf(q.ownerDeptId)>-1}).length;return ui.vrView||(pend?'inbox':'request')}
+function menuFor(r){
+  var pend=S.events.filter(function(e){return e.status==='pending'}).length,inbox=vrAlerts().length;
+  var evb=canApprove()&&pend?pend:0;
+  var I=function(label,tab,sub,badge,on){return {label:label,tab:tab,sub:sub||null,badge:badge||0,on:on||null}};
+  var ov=I('Overview','overview');
+  var trk=['Academic tracker','chart',[I('Weekly plan','track',{trView:'plan'}),I('Progress report','track',{trView:'report'}),I('Leaderboard','track',{trView:'board'})]];
+  var syU=I('Fortnightly update','syl',{sylView:'update'}),syR=I('Coverage report','syl',{sylView:'report'});
+  var G=function(id,label,icon,items){return {id:id,label:label,icon:icon,items:items}};
+  var T=function(t){return G('trk',t[0],t[1],t[2])};
+  if(r==='admin')return [{solo:ov},
+    G('ven','Venues','building',[I('Availability','avail'),I('Events and bookings','events',null,evb),I('Venue requests','inbox',null,inbox)]),
+    G('tt','Timetables','cal',[I('Timetables','timetable'),I('Rooms by class','classes'),I('Class changes','changes')]),
+    T(trk),
+    G('syl','Syllabus tracker','book',[syU,syR]),
+    G('acs','Academic setup','sliders',[['prog','Programmes'],['term','Academic session'],['subj','Subjects']].map(function(x){return I(x[1],'masters',{mtab:x[0]})})),
+    G('mas','Masters','sliders',[['depts','Departments'],['classes','Years & sections'],['slots','Time slots'],['bld','Buildings'],['floors','Floors'],['res','Venues'],['users','Users'],['alloc','Allocation'],['track','Tracker mapping'],['loads','Load types'],['offdays','Off days']].map(function(x){return I(x[1],'masters',{mtab:x[0]})})),
+    G('adm','Administration','shield',[I('Activity log','audit')])];
+  if(r==='hod')return [{solo:ov},
+    G('ven','Venues','building',[I('Availability','avail'),I('Request a venue','venues',{vrView:'request'},0,function(){return ui.tab==='venues'&&curVr()==='request'}),I('Requests to decide','venues',{vrView:'inbox'},inbox,function(){return ui.tab==='venues'&&curVr()==='inbox'}),I('Lend my venue','venues',{vrView:'lend'},0,function(){return ui.tab==='venues'&&curVr()==='lend'}),I('Events','events',null,evb)]),
+    G('tt','Timetables','cal',[I('My timetable','timetable'),I('Rooms by class','classes'),I('Class changes','changes')]),
+    T(trk),
+    G('syl','Syllabus tracker','book',[syU,syR])];
+  if(r==='head')return [{solo:ov},
+    G('ven','Venues','building',[I('Find a venue','avail'),I('Events','events',null,evb)]),
+    G('tt','Timetables','cal',[I('Rooms by class','classes'),I('Class changes','changes')]),
+    T(trk),
+    G('syl','Syllabus tracker','book',[syR])];
+  if(r==='viewer')return [{solo:I('Dashboard','dash')},{solo:I('Find a venue','avail')}];
+  return [{solo:ov},G('ven','Venues','building',[I('Find a venue','avail'),I('Events','events',null,evb)]),G('tt','Timetables','cal',[I('Rooms by class','classes')])];
+}
+function navItems(m){var o=[];m.forEach(function(g){if(g.solo)o.push(g.solo);else g.items.forEach(function(i){o.push(i)})});return o}
+function navActive(i){
+  if(i.on)return i.on();
+  if(ui.tab!==i.tab)return false;
+  if(!i.sub)return true;
+  return Object.keys(i.sub).every(function(k){return ui[k]===i.sub[k]});
+}
+function tabsFor(r){return navItems(menuFor(r)).map(function(i){return [i.tab,i.label]})}
+function navHTML(r){
+  var m=menuFor(r),ico=function(k){return '<svg class="ni" viewBox="0 0 24 24" aria-hidden="true">'+(NAVI[k]||NAVI.grid)+'</svg>'};
+  var itemHTML=function(i,idx){
+    var on=navActive(i);
+    return '<button class="nv'+(on?' on':'')+'" data-act="nav" data-tab="'+i.tab+'" data-sub="'+esc(i.sub?JSON.stringify(i.sub):'')+'"'+(on?' aria-current="page"':'')+'><span>'+esc(i.label)+'</span>'+(i.badge?'<span class="count">'+i.badge+'</span>':'')+'</button>';
+  };
+  return '<nav class="sidenav" aria-label="Main">'+m.map(function(g){
+    if(g.solo){var on=navActive(g.solo);return '<button class="nv solo'+(on?' on':'')+'" data-act="nav" data-tab="'+g.solo.tab+'" data-sub=""'+(on?' aria-current="page"':'')+'>'+ico(g.solo.tab==='overview'?'grid':'building')+'<span>'+esc(g.solo.label)+'</span></button>'}
+    var has=g.items.some(navActive),open=ui.navOpen[g.id]===undefined?has:ui.navOpen[g.id];
+    if(has&&ui.navOpen[g.id]===undefined)open=true;
+    var tot=g.items.reduce(function(a,i){return a+(i.badge||0)},0);
+    return '<div class="ng'+(open?' open':'')+(has?' has':'')+'"><button class="ngh" data-act="navgrp" data-g="'+g.id+'" aria-expanded="'+open+'">'+ico(g.icon)+'<span>'+esc(g.label)+'</span>'+(!open&&tot?'<span class="count">'+tot+'</span>':'')+'<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>'+(open?'<div class="ngi">'+g.items.map(itemHTML).join('')+'</div>':'')+'</div>';
+  }).join('')+'</nav>';
 }
 
 /* ---------- small html pieces ---------- */
@@ -438,7 +489,7 @@ function vrAlerts(){
   return out.sort(function(a,b){return (a.k==='pending'?0:1)-(b.k==='pending'?0:1)||a.q.date.localeCompare(b.q.date)});
 }
 function alertsHTML(){
-  var al=vrAlerts(),rem=trReminder();if(!al.length)return rem?'<section class="alerts" aria-label="Reminders">'+rem+'</section>':'';
+  var al=vrAlerts(),rem=trReminder()+sylReminder();if(!al.length)return rem?'<section class="alerts" aria-label="Reminders">'+rem+'</section>':'';
   var rows=al.map(function(a){
     var q=a.q,r=resById(q.resId),vn='<b>'+esc(r?r.name:'a venue')+'</b>',when=fmtDate(q.date)+', <span class="mono">'+timeRange(q.slotIds)+'</span>',cl=q.classId&&classById(q.classId)?' for <b>'+esc(classLabel(q.classId))+'</b>':'',cls,ic,txt,btn='';
     var dis='<button class="btn sm" data-act="vrseen" data-id="'+q.id+'" data-side="'+(a.side||'')+'">Dismiss</button>';
@@ -470,7 +521,7 @@ function vVenues(){
   return nav+(v==='inbox'?vInbox():v==='lend'?vLend():vBorrow());
 }
 /* ---------- activity log (administrator) ---------- */
-var AU_ENT={depts:'Department',classes:'Year & section',slots:'Period',buildings:'Building',floors:'Floor',resources:'Venue',users:'User',tt:'Timetable class',releases:'Class change',events:'Event / booking',vreqs:'Venue request',loads:'Load type',holidays:'Off day',wplans:'Weekly plan',unlocks:'Tracker unlock',session:'Sign-in'};
+var AU_ENT={depts:'Department',classes:'Year & section',slots:'Period',buildings:'Building',floors:'Floor',resources:'Venue',users:'User',tt:'Timetable class',releases:'Class change',events:'Event / booking',vreqs:'Venue request',loads:'Load type',holidays:'Off day',wplans:'Weekly plan',unlocks:'Tracker unlock',programmes:'Programme',terms:'Term',subjects:'Subject',syllabus:'Syllabus progress',sunlocks:'Syllabus unlock',session:'Sign-in'};
 var AU_ACT={create:['b-ok','Added'],update:['b-wait','Changed'],delete:['b-no','Deleted'],login:['b-ok','Sign-in'],login_failed:['b-no','Failed sign-in'],logout:['b-wait','Sign-out'],denied:['b-no','Refused']};
 function auQuery(offset,limit){
   var f=ui.auF,p=[];['q','user','entity','action','from','to'].forEach(function(k){if(f[k])p.push(k+'='+encodeURIComponent(f[k]))});
@@ -1053,12 +1104,12 @@ function mAlloc(){
   L.map(function(r){return '<tr><td><b>'+esc(r.name)+'</b></td><td>'+tcode(r.type)+esc(r.type)+'</td><td class="mono">'+r.capacity+'</td><td class="mono">'+S.tt.filter(function(t){return t.resId===r.id}).length+'</td><td><select id="alloc-'+r.id+'" data-alloc="'+r.id+'" aria-label="Allocate '+esc(r.name)+'">'+deptOpts('Central pool (no department)').map(function(o){return '<option value="'+o[0]+'"'+(o[0]===(r.deptId||'')?' selected':'')+'>'+esc(o[1])+'</option>'}).join('')+'</select></td></tr>'}).join('')+'</tbody></table></div>'+(L.length?'':noMatch(S.resources.length,'No venues yet.'));
 }
 function vMasters(){
-  var subs=[['depts','Departments'],['classes','Years & sections'],['slots','Time slots'],['bld','Buildings'],['floors','Floors'],['res','Venues'],['users','Users'],['alloc','Allocation'],['track','Tracker mapping'],['loads','Load types'],['offdays','Off days']];
-  var add={depts:['dept','Add department'],classes:['class','Add year & sections'],slots:['slot','Add time slot'],bld:['building','Add building'],floors:['floor','Add floor'],res:['resource','Add venue'],users:['user','Add user'],loads:['load','Add load type'],offdays:['offday','Add off day']}[ui.mtab];
-  var body={depts:mDepts,classes:mClasses,slots:mSlots,bld:mBuildings,floors:mFloors,res:mRes,users:mUsers,alloc:mAlloc,track:mTrack,loads:mLoads,offdays:mOffdays}[ui.mtab]();
-  var blurb2={track:'Choose which departments, years and sections take part in the Academic tracker. Only mapped ones appear in the weekly plan, the progress report and the leaderboard.',loads:'Types of teaching and training hours that department heads plan and track every week, such as theory, laboratory or aptitude training.',offdays:'Central holidays for every department. Use a date range for more than one day. Department heads mark their own sections’ off days in the Academic tracker. Saturdays and Sundays are off by default; add a working day to override.'};
+  var subs=[['depts','Departments'],['classes','Years & sections'],['prog','Programmes'],['term','Academic session'],['subj','Subjects'],['slots','Time slots'],['bld','Buildings'],['floors','Floors'],['res','Venues'],['users','Users'],['alloc','Allocation'],['track','Tracker mapping'],['loads','Load types'],['offdays','Off days']];
+  var add={depts:['dept','Add department'],classes:['class','Add year & sections'],slots:['slot','Add time slot'],bld:['building','Add building'],floors:['floor','Add floor'],res:['resource','Add venue'],users:['user','Add user'],loads:['load','Add load type'],offdays:['offday','Add off day'],prog:['prog','Add programme'],term:['term','Add term'],subj:['subj','Add subject']}[ui.mtab];
+  var body={depts:mDepts,classes:mClasses,slots:mSlots,bld:mBuildings,floors:mFloors,res:mRes,users:mUsers,alloc:mAlloc,track:mTrack,loads:mLoads,offdays:mOffdays,prog:mProg,term:mTerm,subj:mSubj}[ui.mtab]();
+  var blurb2={prog:'Programmes and how many semesters each one runs. A department is linked to one programme, and its years cannot go beyond it.',term:'The academic session runs in two terms: odd (semesters 1, 3, 5, 7) and even (2, 4, 6, 8). The current term decides each section\'s semester and the dates of the fortnights.',subj:'The subject master: each subject belongs to a programme and a semester (so a year), and to one department or to all of them. The syllabus tracker is built from it.',track:'Choose which departments, years and sections take part in the Academic tracker. Only mapped ones appear in the weekly plan, the progress report and the leaderboard.',loads:'Types of teaching and training hours that department heads plan and track every week, such as theory, laboratory or aptitude training.',offdays:'Central holidays for every department. Use a date range for more than one day. Department heads mark their own sections’ off days in the Academic tracker. Saturdays and Sundays are off by default; add a working day to override.'};
   var blurb={depts:'Departments that own venues and timetables.',classes:'Years and sections of each department. Department heads pick them from a dropdown when they schedule a class.',slots:'The periods of a college day. Timetables and bookings use these.',bld:'Buildings and blocks. They appear as a dropdown when you create a venue.',floors:'Floors, ordered by level. They appear as a dropdown when you create a venue.',res:'Inventory of lecture theatres, computer labs, seminar halls and auditoriums.',users:'Everyone who signs in, with a role and, for department heads, a department.',alloc:'Assign each venue to a department or leave it in the central pool.'}[ui.mtab];
-  return '<div class="head"><div><h2>Masters</h2><p>'+(blurb2[ui.mtab]||blurb)+'</p></div>'+(add?'<button class="btn primary" data-act="add" data-t="'+add[0]+'">'+add[1]+'</button>':'')+'</div>'+
+  return '<div class="head"><div><h2>Masters</h2><p>'+(blurb2[ui.mtab]||blurb)+'</p></div>'+(ui.mtab==='subj'?'<button class="btn" data-act="subimp">Import list</button>':'')+(add?'<button class="btn primary" data-act="add" data-t="'+add[0]+'">'+add[1]+'</button>':'')+'</div>'+
     '<div class="seg">'+subs.map(function(s){return '<button class="btn sm'+(ui.mtab===s[0]?' on':'')+'" data-act="mtab" data-v="'+s[0]+'">'+s[1]+'</button>'}).join('')+'</div>'+body;
 }
 
@@ -1086,7 +1137,7 @@ function modalHTML(){
   var v=m.vals||{},title='',body='',extra='';
   switch(m.type){
     case 'dept':title=(v.id?'Edit':'Add')+' department';
-      body=fld('Department name',tin('name',v.name,'required autocomplete="off"'))+fld('Short code',tin('code',v.code,'required maxlength="6" autocomplete="off"'));break;
+      body=fld('Department name',tin('name',v.name,'required autocomplete="off"'))+fld('Short code',tin('code',v.code,'required maxlength="6" autocomplete="off"'))+fld('Programme',sel('programmeId',[['','Not set']].concat(S.programmes.map(function(p){return [p.id,p.code+' · '+p.semesters+' semesters']})),v.programmeId||''));break;
     case 'class':title=(v.id?'Edit':'Add')+' year and section';
       body=fld('Department',sel('deptId',deptOpts(),v.deptId||(S.depts[0]||{}).id))+'<div class="frow">'+fld('Year',sel('year',[1,2,3,4,5,6].map(function(y){return [y,'Year '+y]}),v.year||1))+fld(v.id?'Section':'Sections',tin('section',v.section,'required placeholder="A, B, C" autocomplete="off"'))+'</div>'+fld('Students per section (optional)',tin('strength',v.strength||'','type="number" min="0"'))+(v.id?'':'<p class="note" style="margin:0">Enter several sections separated by commas to add them together.</p>');break;
     case 'building':title=(v.id?'Edit':'Add')+' building';
@@ -1097,6 +1148,20 @@ function modalHTML(){
       body=fld('Label',tin('label',v.label,'required maxlength="14"'))+'<div class="frow">'+fld('Start',tin('start',v.start||'09:00','type="time" required'))+fld('End',tin('end',v.end||'10:00','type="time" required'))+'</div><label class="chk"><input type="checkbox" name="isBreak" value="1"'+(v.isBreak?' checked':'')+'> This is a break (lunch). No classes or events can be placed in it.</label>';break;
     case 'resource':title=(v.id?'Edit':'Add')+' venue';
       body=fld('Name',tin('name',v.name,'required'))+'<div class="frow">'+fld('Type',sel('type',TYPES.map(function(t){return [t,t]}),v.type||TYPES[0]))+fld('Seats',tin('capacity',v.capacity||'','type="number" min="1" required'))+'</div>'+'<div class="frow">'+fld('Building',sel('buildingId',S.buildings.map(function(b){return [b.id,b.name]}),v.buildingId||(S.buildings[0]||{}).id))+fld('Floor',sel('floorId',floorList().map(function(f){return [f.id,f.name]}),v.floorId||(floorList()[0]||{}).id))+'</div>'+fld('Equipment',tin('equipment',v.equipment))+fld('Allocated to',sel('deptId',deptOpts('Central pool (no department)'),v.deptId||''));break;
+    case 'prog':title=(v.id?'Edit':'Add')+' programme';
+      body='<div class="frow">'+fld('Short name',tin('code',v.code,'required maxlength="16" placeholder="B.Tech" autocomplete="off"'))+fld('Semesters',tin('semesters',v.semesters||'','type="number" min="1" max="12" required placeholder="8"'))+'</div>'+fld('Full name',tin('name',v.name,'required maxlength="120" placeholder="Bachelor of Technology" autocomplete="off"'));break;
+    case 'term':title=(v.id?'Edit':'Add')+' term';
+      extra='<p class="ctx">Odd terms run semesters 1, 3, 5, 7 and even terms 2, 4, 6, 8. Fortnights are counted from the Monday of the start date.</p>';
+      body='<div class="frow">'+fld('Session',tin('session',v.session,'required maxlength="7" placeholder="2026-27" autocomplete="off"'))+fld('Term',sel('kind',[['odd','Odd semesters'],['even','Even semesters']],v.kind||'odd'))+'</div><div class="frow">'+fld('Starts',tin('startDate',v.startDate||today,'type="date" required'))+fld('Ends',tin('endDate',v.endDate||addD(today,125),'type="date" required'))+'</div>';break;
+    case 'subj':title=(v.id?'Edit':'Add')+' subject';
+      body='<div class="frow">'+fld('Code',tin('code',v.code,'required maxlength="24" autocomplete="off"'))+fld('Type',sel('type',[['Theory','Theory'],['Lab','Lab'],['Training','Training']],v.type||'Theory'))+'</div>'+fld('Subject name',tin('name',v.name,'required maxlength="160" autocomplete="off"'))+
+        '<div class="frow">'+fld('Programme',sel('programmeId',S.programmes.map(function(p){return [p.id,p.code]}),v.programmeId||(S.programmes[0]||{}).id))+fld('Department',sel('deptId',[['common','Common to all departments']].concat(S.depts.map(function(d){return [d.id,d.code+' – '+d.name]})),v.deptId||'common'))+'</div>'+
+        '<div class="frow">'+fld('Semester',tin('semester',v.semester||'','type="number" min="1" max="12" required'))+fld('Units / modules',tin('units',v.units||5,'type="number" min="1" max="30" required'))+'</div>';break;
+    case 'subimp':title='Import subjects';
+      extra='<p class="ctx">One subject per line: <b>code, name, semester, type, units</b>. Semester, type and units are optional (they default to the semester below, Theory and 5). Paste from a spreadsheet or type commas. Existing codes are skipped.</p>';
+      body='<div class="frow">'+fld('Programme',sel('programmeId',S.programmes.map(function(p){return [p.id,p.code]}),v.programmeId||(S.programmes[0]||{}).id))+fld('Department',sel('deptId',[['common','Common to all departments']].concat(S.depts.map(function(d){return [d.id,d.code+' – '+d.name]})),v.deptId||'common'))+'</div>'+fld('Default semester',tin('semester',v.semester||'','type="number" min="1" max="12" placeholder="Used when a line has none"'))+
+        fld('Subjects','<textarea id="f-text" name="text" rows="9" placeholder="CS301, Data Structures, 3, Theory, 5&#10;CS302, Data Structures Lab, 3, Lab, 6">'+esc(v.text||'')+'</textarea>');break;
+    case 'syunlock':{var uc=classById(v.classId);title='Unlock fortnight';extra='<p class="ctx">'+esc(uc?classLabel(uc.id):'')+' · '+esc(fnLabel(curTerm(),v.fn))+'</p><p class="note" style="margin:0">The head can update the figures until the date you choose. After that the fortnight locks again by itself.</p>';body=fld('Unlocked until',tin('until',v.until,'type="date" required'))+fld('Reason (optional)',tin('note',v.note,'autocomplete="off" placeholder="Late entry, corrected figures"'));break}
     case 'load':title=(v.id?'Edit':'Add')+' load type';
       body=fld('Name',tin('name',v.name,'required maxlength="60" placeholder="Theory lectures"'))+fld('Kind',sel('kind',LOAD_KINDS.map(function(k){return [k,k]}),v.kind||'Academic'));break;
     case 'offday':title=(v.id?'Edit':'Mark')+' off day';
@@ -1155,16 +1220,17 @@ function vLogin(){
 function render(){
   var head=document.getElementById('topbar'),brand='<div class="brand">'+brandSvg+'<div><h1>Campus Resource Planner</h1><small>Lecture theatres, labs, seminar halls and auditoriums</small></div></div>';
   var y=window.scrollY;
-  if(ui.booting){head.classList.add('gated');head.innerHTML='<div class="bar">'+brand+'</div>';document.getElementById('main').innerHTML='<div class="empty">Loading…</div>';document.getElementById('modalRoot').innerHTML='';document.getElementById('foot').innerHTML='';return}
-  if(!ui.userId){head.classList.add('gated');head.innerHTML='<div class="bar">'+brand+'</div>';document.getElementById('main').innerHTML=vLogin();document.getElementById('modalRoot').innerHTML='';document.getElementById('foot').innerHTML='';return}
+  if(ui.booting){head.classList.add('gated');document.getElementById('side').innerHTML='';document.getElementById('shell').className='shell nosb';head.innerHTML='<div class="bar">'+brand+'</div>';document.getElementById('main').innerHTML='<div class="empty">Loading…</div>';document.getElementById('modalRoot').innerHTML='';document.getElementById('foot').innerHTML='';return}
+  if(!ui.userId){head.classList.add('gated');document.getElementById('side').innerHTML='';document.getElementById('shell').className='shell nosb';head.innerHTML='<div class="bar">'+brand+'</div>';document.getElementById('main').innerHTML=vLogin();document.getElementById('modalRoot').innerHTML='';document.getElementById('foot').innerHTML='';return}
   ensure();
   var u=me(),tabs=tabsFor(u.role);
   if(!tabs.some(function(t){return t[0]===ui.tab}))ui.tab=tabs[0][0];
   head.classList.remove('gated');
-  head.innerHTML='<div class="bar">'+brand+
+  head.innerHTML='<div class="bar"><button class="burger" data-act="navtoggle" aria-label="Menu"><span></span><span></span><span></span></button>'+brand+
     '<div class="who"><span id="sync" class="syncwrap"></span><span class="me" title="'+esc(u.email)+'"><b>'+esc(u.name)+'</b> · '+ROLE[u.role]+'</span><button class="btn sm" data-act="logout">Sign out</button><button class="btn sm" data-act="logoutall" title="Sign out on every device where you are signed in">Sign out everywhere</button></div></div>'+
-    '<nav class="tabs" role="tablist" aria-label="Sections">'+tabs.map(function(t){return '<button class="tab" role="tab" aria-selected="'+(t[0]===ui.tab)+'" data-act="tab" data-v="'+t[0]+'">'+t[1]+'</button>'}).join('')+'</nav>';
-  document.getElementById('main').innerHTML={dash:function(){return '<div class="head"><div><h2>Available venues</h2><p>See which venues are free on a day and time.</p></div></div>'+vDashAvail()},overview:vOverview,avail:vAvail,events:vEvents,venues:vVenues,inbox:vInbox,audit:vAudit,track:vTrack,timetable:vTimetable,classes:vClasses,changes:vChanges,masters:vMasters}[ui.tab]();
+    '';
+  var side=document.getElementById('side');side.innerHTML=navHTML(u.role);document.getElementById('shell').className='shell'+(ui.navDrawer?' drawer':'');
+  document.getElementById('main').innerHTML={dash:function(){return '<div class="head"><div><h2>Available venues</h2><p>See which venues are free on a day and time.</p></div></div>'+vDashAvail()},overview:vOverview,avail:vAvail,events:vEvents,venues:vVenues,inbox:vInbox,audit:vAudit,track:vTrack,syl:vSyl,timetable:vTimetable,classes:vClasses,changes:vChanges,masters:vMasters}[ui.tab]();
   document.getElementById('modalRoot').innerHTML=modalHTML();
   document.getElementById('foot').innerHTML='<span>Signed in as '+esc(u.email||u.name)+'</span>';
   updateSync();
@@ -1189,13 +1255,16 @@ function submitForm(type,d){
     v.name=(v.name||'').trim();v.code=(v.code||'').trim().toUpperCase();
     if(!v.name||!v.code)return fail('Enter a name and a short code.',d);
     if(S.depts.some(function(x){return x.id!==v.id&&x.code===v.code}))return fail('Another department already uses the code '+v.code+'.',d);
-    if(v.id){o=deptById(v.id);o.name=v.name;o.code=v.code}else S.depts.push({id:uid('d_'),name:v.name,code:v.code,h:(S.depts.length*67+205)%360});
+    var pg=progById(v.programmeId||'');
+    if(pg&&v.id&&S.classes.some(function(c){return c.deptId===v.id&&c.year>yearsOf(pg)}))return fail(pg.code+' runs '+yearsOf(pg)+' years. Remove the later years from this department first.',d);
+    if(v.id){o=deptById(v.id);o.name=v.name;o.code=v.code;o.programmeId=pg?pg.id:null}else S.depts.push({id:uid('d_'),name:v.name,code:v.code,h:(S.depts.length*67+205)%360,programmeId:pg?pg.id:null});
     return done('Department saved.');
   }
   if(type==='class'){
     if(!deptById(v.deptId))return fail('Choose a department.',d);
     var yr=parseInt(v.year,10),secs=String(v.section||'').split(',').map(function(x){return x.trim().toUpperCase()}).filter(Boolean),stn=parseInt(v.strength,10)||0;
     if(!secs.length)return fail('Enter a section such as A.',d);
+    var cpg=progOf(v.deptId);if(cpg&&yr>yearsOf(cpg))return fail(cpg.code+' runs '+cpg.semesters+' semesters ('+yearsOf(cpg)+' years), so year '+yr+' is not allowed.',d);
     if(v.id&&secs.length>1)return fail('Edit one section at a time.',d);
     for(i=0;i<secs.length;i++){if(S.classes.some(function(x){return x.id!==v.id&&x.deptId===v.deptId&&x.year===yr&&x.section===secs[i]}))return fail(deptById(v.deptId).code+'-'+yr+'-'+secs[i]+' already exists.',d)}
     if(v.id){o=classById(v.id);if(o.deptId!==v.deptId&&S.tt.some(function(t){return t.classId===o.id}))return fail('This section has timetable classes. Clear them before moving it to another department.',d);o.deptId=v.deptId;o.year=yr;o.section=secs[0];o.strength=stn}
@@ -1216,6 +1285,48 @@ function submitForm(type,d){
     if(S.floors.some(function(x){return x.id!==v.id&&(x.name.toLowerCase()===v.name.toLowerCase()||x.level===lv)}))return fail('A floor with this name or level already exists.',d);
     if(v.id){o=floorById(v.id);o.name=v.name;o.level=lv}else S.floors.push({id:uid('f'),name:v.name,level:lv});
     return done('Floor saved.');
+  }
+  if(type==='prog'){
+    v.code=(v.code||'').trim();v.name=(v.name||'').trim();var sm=parseInt(v.semesters,10);
+    if(!v.code||!v.name)return fail('Enter a short name and a full name.',d);
+    if(!(sm>=1&&sm<=12))return fail('Semesters must be from 1 to 12.',d);
+    if(S.programmes.some(function(x){return x.id!==v.id&&x.code.toLowerCase()===v.code.toLowerCase()}))return fail('A programme called '+v.code+' already exists.',d);
+    if(v.id&&S.subjects.some(function(x){return x.programmeId===v.id&&x.semester>sm}))return fail('Some subjects are in a semester beyond '+sm+'. Move or delete them first.',d);
+    if(v.id&&S.depts.some(function(x){return x.programmeId===v.id&&S.classes.some(function(c){return c.deptId===x.id&&c.year>Math.ceil(sm/2)})}))return fail('A department of this programme has a year beyond '+Math.ceil(sm/2)+'. Remove it first.',d);
+    if(v.id){o=progById(v.id);o.code=v.code;o.name=v.name;o.semesters=sm}else S.programmes.push({id:uid('p_'),code:v.code,name:v.name,semesters:sm});
+    return done('Programme saved.');
+  }
+  if(type==='term'){
+    v.session=(v.session||'').trim();
+    if(!/^\d{4}-\d{2}$/.test(v.session))return fail('Write the session as 2026-27.',d);
+    if(!v.startDate||!v.endDate||v.endDate<v.startDate)return fail('The term must end after it starts.',d);
+    if(S.terms.some(function(x){return x.id!==v.id&&x.session===v.session&&x.kind===v.kind}))return fail('That session already has an '+v.kind+' term.',d);
+    var cl=S.terms.filter(function(x){return x.id!==v.id&&x.startDate<=v.endDate&&x.endDate>=v.startDate})[0];
+    if(cl)return fail('That overlaps the '+cl.kind+' term of '+cl.session+'.',d);
+    if(v.id){o=S.terms.filter(function(x){return x.id===v.id})[0];o.session=v.session;o.kind=v.kind;o.startDate=v.startDate;o.endDate=v.endDate}else S.terms.push({id:uid('t_'),session:v.session,kind:v.kind,startDate:v.startDate,endDate:v.endDate});
+    return done('Term saved.');
+  }
+  if(type==='subj'){
+    v.code=(v.code||'').trim();v.name=(v.name||'').trim();var sem=parseInt(v.semester,10),un=parseInt(v.units,10),spg=progById(v.programmeId),sdid=v.deptId==='common'?null:v.deptId;
+    if(!v.code||!v.name)return fail('Enter a code and a name.',d);
+    if(!spg)return fail('Choose a programme.',d);
+    if(!(sem>=1&&sem<=spg.semesters))return fail(spg.code+' has semesters 1 to '+spg.semesters+'.',d);
+    if(!(un>=1&&un<=30))return fail('Units must be from 1 to 30.',d);
+    if(S.subjects.some(function(x){return x.id!==v.id&&x.programmeId===spg.id&&(x.deptId||null)===sdid&&x.code.toLowerCase()===v.code.toLowerCase()}))return fail('That code already exists for this programme and department.',d);
+    if(v.id){o=S.subjects.filter(function(x){return x.id===v.id})[0];o.code=v.code;o.name=v.name;o.programmeId=spg.id;o.deptId=sdid;o.semester=sem;o.type=v.type;o.units=un}else S.subjects.push({id:uid('sb'),code:v.code,name:v.name,programmeId:spg.id,deptId:sdid,semester:sem,type:v.type,units:un});
+    return done('Subject saved.');
+  }
+  if(type==='subimp'){
+    var im=importSubjects(v);if(im.err)return fail(im.err,d);
+    if(!im.add.length)return fail('Nothing to add. '+(im.skipped?'Those codes already exist.':''),d);
+    im.add.forEach(function(x){S.subjects.push(x)});
+    return done(im.add.length+' subject'+(im.add.length===1?'':'s')+' added'+(im.skipped?', '+im.skipped+' skipped as they already exist':'')+'.');
+  }
+  if(type==='syunlock'){
+    if(!v.until||v.until<today)return fail('Choose today or a later date.',d);
+    var ex2=S.sunlocks.filter(function(x){return x.classId===v.classId&&x.fortnight===v.fn})[0];
+    if(ex2){ex2.until=v.until;ex2.note=(v.note||'').trim()}else S.sunlocks.push({id:uid('k'),classId:v.classId,fortnight:v.fn,until:v.until,note:(v.note||'').trim(),by:me().name});
+    return done('Fortnight unlocked until '+fmtLong(v.until)+'.');
   }
   if(type==='load'){
     v.name=(v.name||'').trim();
@@ -1396,6 +1507,199 @@ function submitForm(type,d){
   }
 }
 
+/* ---------- programmes, terms, subjects and the syllabus tracker ---------- */
+function curTerm(){
+  var t=S.terms.filter(function(x){return x.startDate<=today&&today<=x.endDate})[0];if(t)return t;
+  var past=S.terms.filter(function(x){return x.startDate<=today}).sort(function(a,b){return b.startDate.localeCompare(a.startDate)});
+  return past[0]||S.terms.slice().sort(function(a,b){return a.startDate.localeCompare(b.startDate)})[0]||null;
+}
+function progById(id){return S.programmes.filter(function(p){return p.id===id})[0]||null}
+function progOf(deptId){var d=deptById(deptId);return d?progById(d.programmeId):null}
+function yearsOf(p){return p?Math.ceil(p.semesters/2):6}
+function semOf(c,term){term=term||curTerm();if(!term)return null;var p=progOf(c.deptId),s=term.kind==='odd'?2*c.year-1:2*c.year;return p&&s<=p.semesters?s:null}
+function subjectsFor(c,sem){var d=deptById(c.deptId);if(!d||!sem||!d.programmeId)return [];return S.subjects.filter(function(s){return s.programmeId===d.programmeId&&s.semester===sem&&(!s.deptId||s.deptId===d.id)}).sort(function(a,b){return a.code.localeCompare(b.code)})}
+function dayDiff(a,b){return Math.round((Date.parse(b)-Date.parse(a))/864e5)}
+function fortnightsOf(t){var out=[],f=mondayOf(t.startDate);while(f<=t.endDate&&f<=today){out.push(f);f=addD(f,14)}return out}
+function fnNo(t,f){return dayDiff(mondayOf(t.startDate),f)/14+1}
+function fnLabel(t,f){return 'Fortnight '+fnNo(t,f)+' · '+fmtShort(f)+' – '+fmtShort(addD(f,13))}
+function fnDeadline(f){return addD(f,14)}
+function syUnlock(cid,f){return S.sunlocks.filter(function(x){return x.classId===cid&&x.fortnight===f&&x.until>=today})[0]||null}
+function syLocked(cid,f){return today>fnDeadline(f)&&!syUnlock(cid,f)}
+function syRow(cid,sid,f){return S.syllabus.filter(function(r){return r.classId===cid&&r.subjectId===sid&&r.fortnight===f})[0]||null}
+function syLast(cid,sid,upto,strict){return S.syllabus.filter(function(r){return r.classId===cid&&r.subjectId===sid&&(strict?r.fortnight<upto:r.fortnight<=upto)}).sort(function(a,b){return b.fortnight.localeCompare(a.fortnight)})[0]||null}
+/* share of the term that has passed at the end of fortnight f (or today, while it is running): the pace a section should be at */
+function syExpected(t,f){var end=addD(f,13);if(end>today)end=today;var span=dayDiff(t.startDate,t.endDate)+1,el=dayDiff(t.startDate,end)+1;return Math.max(0,Math.min(100,Math.round(el*100/span)))}
+var SY_TOL=10;
+function sylView(){return me().role==='head'?'report':(ui.sylView||'update')}
+function vSyl(){return sylView()==='report'?vSylReport():vSylUpdate()}
+function syNoTerm(){return emptyBox(me().role==='admin'?'No academic session is set. Add the current term in Masters → Academic session.':'The administrator has not set the current term yet.')}
+function vSylUpdate(){
+  var u=me(),isHod=u.role==='hod',t=curTerm();
+  var head='<div class="head"><div><h2>Fortnightly syllabus update</h2><p>Every fortnight, record how much of each subject has been covered. Enter the figures so far (not just this fortnight): units completed and the percentage of the whole syllabus. The update is due by the Monday after the fortnight ends, then it locks.</p></div></div>';
+  if(!t)return head+syNoTerm();
+  var depts=S.depts.filter(function(d){return (!isHod||myDepts().indexOf(d.id)>-1)&&d.programmeId&&tClassesOf(d.id).some(function(c){return semOf(c,t)})});
+  if(!depts.length)return head+emptyBox(u.role==='admin'?'No department is ready yet. Give each department a programme in Masters → Departments, and map its years and sections in Tracker mapping.':'Your department has no programme or mapped year and section yet. Ask the administrator to set it up.');
+  var fns=fortnightsOf(t);
+  if(!fns.length)return head+emptyBox('The '+t.kind+' term of '+esc(t.session)+' starts on '+fmtLong(t.startDate)+'. Updates open with its first fortnight.');
+  if(!ui.syDept||!depts.some(function(d){return d.id===ui.syDept}))ui.syDept=depts[0].id;
+  var cls=tClassesOf(ui.syDept).filter(function(c){return semOf(c,t)});
+  if(!ui.syClass||!cls.some(function(c){return c.id===ui.syClass}))ui.syClass=cls[0].id;
+  if(!ui.syFn||fns.indexOf(ui.syFn)<0)ui.syFn=fns[fns.length-1];
+  var c=classById(ui.syClass),sem=semOf(c,t),subs=subjectsFor(c,sem),f=ui.syFn,adm=u.role==='admin',locked=syLocked(c.id,f),edit=canEditTrack(c.id)&&(!locked||adm),ulk=syUnlock(c.id,f);
+  var ctl='<div class="panel"><div class="filters"><label>Department<select data-set="syDept">'+depts.map(function(d){return '<option value="'+d.id+'"'+(d.id===ui.syDept?' selected':'')+'>'+esc(d.code+' – '+d.name)+'</option>'}).join('')+'</select></label>'+
+    '<label>Year and section<select data-set="syClass">'+cls.map(function(x){return '<option value="'+x.id+'"'+(x.id===c.id?' selected':'')+'>'+esc(classLabel(x.id))+' · semester '+semOf(x,t)+'</option>'}).join('')+'</select></label>'+
+    '<label>Fortnight<select data-set="syFn">'+fns.slice().reverse().map(function(x){return '<option value="'+x+'"'+(x===f?' selected':'')+'>'+esc(fnLabel(t,x))+'</option>'}).join('')+'</select></label></div></div>';
+  var chip='Due by <b>Monday '+fmtShort(fnDeadline(f))+'</b>';
+  if(locked)chip+=' <span class="wchip lock">🔒 Locked</span>'+(adm?' <button class="btn sm" data-act="syunlock">Unlock</button>':'');
+  else if(ulk)chip+='<br><span class="wchip now">Unlocked until '+fmtShort(ulk.until)+'</span>'+(adm?' <button class="btn sm" data-act="sylock">Lock again</button>':'');
+  var info='<p class="note" style="margin:6px 0">'+esc(classFull(c))+' · semester '+sem+' · '+(t.kind==='odd'?'odd':'even')+' term '+esc(t.session)+' · '+chip+'</p>';
+  if(!subs.length)return head+ctl+info+emptyBox('No subjects are set for '+esc(progOf(c.deptId).code)+' semester '+sem+'. The administrator adds them in Masters → Subjects.');
+  var exp=syExpected(t,f),filled=0;
+  var rows=subs.map(function(s){
+    var r=syRow(c.id,s.id,f),last=syLast(c.id,s.id,f,true),show=r||null;if(r)filled++;
+    var auto=!r||r.pct===Math.round(r.unitsDone*100/s.units);
+    var pc=r?r.pct:(last?last.pct:0),bh=r&&r.pct<exp-SY_TOL;
+    return '<tr><td class="mono">'+esc(s.code)+'</td><td><b>'+esc(s.name)+'</b>'+(s.deptId?'':' <span class="badge b-wait">Common</span>')+'</td><td>'+s.type+'</td><td class="mono">'+s.units+'</td>'+
+      '<td class="note">'+(last?last.unitsDone+' of '+s.units+' · '+last.pct+'%':'–')+'</td>'+
+      '<td><input class="sy2" type="number" inputmode="numeric" min="0" max="'+s.units+'" data-syu="'+s.id+'" data-tot="'+s.units+'" value="'+(r?r.unitsDone:'')+'" placeholder="'+(last?last.unitsDone:'0')+'"'+(edit?'':' disabled')+' aria-label="Units completed for '+esc(s.code)+'"></td>'+
+      '<td><input class="sy3" type="number" inputmode="numeric" min="0" max="100" data-syp="'+s.id+'" data-auto="'+(auto?1:0)+'" value="'+(r?r.pct:'')+'" placeholder="'+(last?last.pct:'0')+'"'+(edit?'':' disabled')+' aria-label="Percent covered for '+esc(s.code)+'"></td>'+
+      '<td class="mono'+(bh?' bad':'')+'">'+exp+'%'+(bh?' <span class="badge b-no">Behind</span>':'')+'</td>'+
+      '<td><input class="syr" type="text" maxlength="300" data-syr="'+s.id+'" value="'+esc(r?r.remark:'')+'" placeholder="Remark (optional)"'+(edit?'':' disabled')+'></td></tr>'}).join('');
+  var foot=edit?'<div class="syfoot"><button class="btn primary" data-act="sysave">Save this fortnight</button><span class="note">'+filled+' of '+subs.length+' subjects updated. Leave a subject blank to skip it.</span></div>':(isHod||adm?'<p class="note">This fortnight is locked. Ask the administrator to unlock it for a late update.</p>':'');
+  return head+ctl+info+'<div class="scroll"><table class="tbl sytbl"><thead><tr><th>Code</th><th>Subject</th><th>Type</th><th>Units</th><th>Last fortnight</th><th>Units done</th><th>% covered</th><th title="Share of the term that has passed">Expected</th><th>Remark</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+foot;
+}
+function sySave(){
+  var t=curTerm(),c=classById(ui.syClass),f=ui.syFn;if(!t||!c)return;
+  var subs=subjectsFor(c,semOf(c,t)),out=[],err='';
+  subs.forEach(function(s){
+    if(err)return;
+    var ue=document.querySelector('[data-syu="'+s.id+'"]'),pe=document.querySelector('[data-syp="'+s.id+'"]'),re=document.querySelector('[data-syr="'+s.id+'"]');if(!ue||!pe||!re)return;
+    var uv=ue.value.trim(),pv=pe.value.trim(),rv=re.value.trim(),ex=syRow(c.id,s.id,f);
+    if(uv===''&&pv===''&&rv==='')return;
+    var u=uv===''?null:Number(uv),p=pv===''?null:Number(pv);
+    if((u!==null&&(!isFinite(u)||u<0||u>s.units||Math.floor(u)!==u))||(p!==null&&(!isFinite(p)||p<0||p>100||Math.floor(p)!==p))){err=s.code+': units must be a whole number from 0 to '+s.units+' and the percentage from 0 to 100.';return}
+    if(u===null&&p===null){u=ex?ex.unitsDone:0;p=ex?ex.pct:0}
+    else if(u===null)u=Math.min(s.units,Math.floor(p*s.units/100));
+    else if(p===null)p=Math.round(u*100/s.units);
+    out.push({s:s,u:u,p:p,r:rv,ex:ex});
+  });
+  if(err)return toast(err,true);
+  var n=0;
+  out.forEach(function(x){
+    if(x.ex){if(x.ex.unitsDone!==x.u||x.ex.pct!==x.p||x.ex.remark!==x.r){x.ex.unitsDone=x.u;x.ex.pct=x.p;x.ex.remark=x.r;n++}}
+    else{S.syllabus.push({id:uid('sy'),classId:c.id,subjectId:x.s.id,fortnight:f,unitsDone:x.u,pct:x.p,remark:x.r});n++}
+  });
+  if(!n)return toast(out.length?'Nothing changed.':'Enter units or a percentage for at least one subject.',true);
+  save();render();toast('Saved '+n+' subject'+(n===1?'':'s')+' for '+classLabel(c.id)+'.');
+}
+function syReportRows(cids,t,f){
+  var out=[],exp=syExpected(t,f);
+  cids.forEach(function(cid){var c=classById(cid);subjectsFor(c,semOf(c,t)).forEach(function(s){
+    var r=syLast(cid,s.id,f),pct=r?r.pct:0,fresh=!!syRow(cid,s.id,f);
+    out.push({c:c,s:s,r:r,pct:pct,done:r?r.unitsDone:0,exp:exp,gap:pct-exp,fresh:fresh,state:!r?'none':(pct-exp<-2*SY_TOL?'far':pct-exp<-SY_TOL?'behind':'ok')});
+  })});
+  return out;
+}
+function syScope(){
+  var u=me(),t=curTerm(),depts=S.depts.filter(function(d){return d.programmeId&&(u.role!=='hod'||myDepts().indexOf(d.id)>-1)&&tClassesOf(d.id).some(function(c){return semOf(c,t)})});
+  if(ui.syRepDept!=='all'&&!depts.some(function(d){return d.id===ui.syRepDept}))ui.syRepDept='all';
+  var use=ui.syRepDept==='all'?depts:depts.filter(function(d){return d.id===ui.syRepDept}),cids=[];
+  use.forEach(function(d){tClassesOf(d.id).forEach(function(c){if(semOf(c,t))cids.push(c.id)})});
+  return {depts:depts,cids:cids};
+}
+function vSylReport(){
+  var t=curTerm(),head='<div class="head"><div><h2>Syllabus coverage report</h2><p>Coverage of every subject against the pace expected for this point in the term. A section is flagged when its coverage is more than '+SY_TOL+' points behind. The expected pace is the share of the term that has passed.</p></div></div>';
+  if(!t)return head+syNoTerm();
+  var fns=fortnightsOf(t);
+  if(!fns.length)return head+emptyBox('The term starts on '+fmtLong(t.startDate)+'. The report opens with its first fortnight.');
+  if(ui.syRepDept===undefined)ui.syRepDept='all';
+  var sc=syScope();
+  if(!sc.depts.length)return head+emptyBox('No department has a programme and mapped years and sections yet.');
+  if(!ui.syRepFn||fns.indexOf(ui.syRepFn)<0)ui.syRepFn=fns[fns.length-1];
+  var f=ui.syRepFn,rows=syReportRows(sc.cids,t,f),only=ui.syRepOnly==='1';
+  var behind=rows.filter(function(r){return r.state==='behind'||r.state==='far'}),secBehind={},secAll={};
+  rows.forEach(function(r){secAll[r.c.id]=1;if(r.state==='behind'||r.state==='far')secBehind[r.c.id]=1});
+  var avg=rows.length?Math.round(rows.reduce(function(a,r){return a+r.pct},0)/rows.length):0,fresh=rows.filter(function(r){return r.fresh}).length;
+  var tiles='<div class="strip trtiles"><div><b>'+avg+'%</b><span>Average coverage</span></div><div><b>'+syExpected(t,f)+'%</b><span>Expected by now</span></div><div><b class="'+(behind.length?'bad':'ok')+'">'+behind.length+'</b><span>Subjects behind pace</span></div><div><b class="'+(Object.keys(secBehind).length?'bad':'ok')+'">'+Object.keys(secBehind).length+'/'+Object.keys(secAll).length+'</b><span>Sections behind</span></div><div><b>'+fresh+'/'+rows.length+'</b><span>Updated this fortnight</span></div></div>';
+  var ctl='<div class="panel"><div class="filters"><label>Department<select data-set="syRepDept"><option value="all">All departments</option>'+sc.depts.map(function(d){return '<option value="'+d.id+'"'+(d.id===ui.syRepDept?' selected':'')+'>'+esc(d.code+' – '+d.name)+'</option>'}).join('')+'</select></label>'+
+    '<label>As of<select data-set="syRepFn">'+fns.slice().reverse().map(function(x){return '<option value="'+x+'"'+(x===f?' selected':'')+'>'+esc(fnLabel(t,x))+'</option>'}).join('')+'</select></label>'+
+    '<label class="chk"><input type="checkbox" data-sycheck="1"'+(only?' checked':'')+'> Only subjects behind pace</label><button class="btn sm" data-act="sycsv">Download CSV</button><button class="btn sm" data-act="rpprint">Print</button></div></div>';
+  var L=(only?behind:rows).slice().sort(function(a,b){return a.gap-b.gap||classLabel(a.c.id).localeCompare(classLabel(b.c.id))});
+  var STT={ok:['b-ok','On pace'],behind:['b-wait','Behind'],far:['b-no','Far behind'],none:['b-no','Not started']};
+  var tb=L.map(function(r){var st=STT[r.state];return '<tr><td><b>'+esc(classLabel(r.c.id))+'</b></td><td class="mono">'+esc(r.s.code)+'</td><td>'+esc(r.s.name)+'</td><td class="mono">'+r.done+'/'+r.s.units+'</td>'+
+    '<td><div class="syb"><span style="width:'+r.pct+'%"></span><i style="left:'+r.exp+'%"></i></div></td><td class="mono"><b>'+r.pct+'%</b></td><td class="mono">'+r.exp+'%</td><td class="mono '+(r.gap<-SY_TOL?'bad':'')+'">'+(r.gap>0?'+':'')+r.gap+'</td><td><span class="badge '+st[0]+'">'+st[1]+'</span></td><td class="note">'+(r.r?'Fortnight '+fnNo(t,r.r.fortnight)+(r.r.remark?' · '+esc(r.r.remark):''):'No update yet')+'</td></tr>'}).join('');
+  return head+ctl+tiles+(L.length?'<div class="scroll"><table class="tbl sytbl"><thead><tr><th>Section</th><th>Code</th><th>Subject</th><th>Units</th><th>Coverage <span class="note">(tick = expected)</span></th><th>Covered</th><th>Expected</th><th>Gap</th><th>Status</th><th>Latest update</th></tr></thead><tbody>'+tb+'</tbody></table></div>':emptyBox(only?'Every subject is on pace.':'No subjects are set for these sections yet.'));
+}
+function syCsv(){
+  var t=curTerm();if(!t||!ui.syRepFn)return;var sc=syScope(),rows=syReportRows(sc.cids,t,ui.syRepFn);
+  var out=[['Section','Semester','Subject code','Subject','Units','Units done','Covered %','Expected %','Gap','Status','Latest fortnight','Remark'].join(',')];
+  var q=function(x){return '"'+String(x==null?'':x).replace(/"/g,'""')+'"'};
+  rows.forEach(function(r){out.push([classLabel(r.c.id),semOf(r.c,t),r.s.code,r.s.name,r.s.units,r.done,r.pct,r.exp,r.gap,r.state==='ok'?'On pace':r.state==='none'?'Not started':r.state==='far'?'Far behind':'Behind',r.r?r.r.fortnight:'',r.r?r.r.remark:''].map(q).join(','))});
+  var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([out.join('\n')],{type:'text/csv'}));a.download='syllabus-coverage-'+ui.syRepFn+'.csv';document.body.appendChild(a);a.click();a.remove();
+}
+/* reminder on the Overview: fortnights that are ending or over and not yet fully reported */
+function sylReminder(){
+  var u=me();if(!u||u.role!=='hod')return '';
+  var t=curTerm();if(!t)return '';var out='';
+  fortnightsOf(t).forEach(function(f){
+    if(today<addD(f,11)||today>fnDeadline(f))return;
+    var n=0;
+    myDepts().forEach(function(did){tClassesOf(did).forEach(function(c){
+      var sem=semOf(c,t);if(!sem||syLocked(c.id,f))return;
+      if(subjectsFor(c,sem).some(function(s){return !syRow(c.id,s.id,f)}))n++;
+    })});
+    if(n)out+='<div class="alert a-warn" role="alert"><span class="aic" aria-hidden="true">!</span><div class="atx">Syllabus progress for <b>'+fmtShort(f)+' – '+fmtShort(addD(f,13))+'</b> is incomplete for <b>'+n+' section'+(n===1?'':'s')+'</b>. Update it by <b>Monday '+fmtShort(fnDeadline(f))+'</b>, after which it locks.</div><button class="btn sm" data-act="gosyl" data-fn="'+f+'">Update now</button></div>';
+  });
+  return out;
+}
+/* masters: programmes, academic session and subjects */
+function mProg(){
+  var L=S.programmes.slice().sort(function(a,b){return a.code.localeCompare(b.code)});
+  return '<div class="scroll"><table class="tbl"><thead><tr><th>Programme</th><th>Name</th><th>Semesters</th><th>Years</th><th>Departments</th><th>Subjects</th><th></th></tr></thead><tbody>'+
+  L.map(function(p){var k='prog:'+p.id,ds=S.depts.filter(function(d){return d.programmeId===p.id});return '<tr><td><b>'+esc(p.code)+'</b></td><td>'+esc(p.name)+'</td><td class="mono">'+p.semesters+'</td><td class="mono">'+yearsOf(p)+'</td><td class="note">'+(ds.length?esc(ds.map(function(d){return d.code}).join(', ')):'<span class="muted">None yet</span>')+'</td><td class="mono">'+S.subjects.filter(function(s){return s.programmeId===p.id}).length+'</td><td class="act"><button class="btn sm" data-act="edit" data-t="prog" data-id="'+p.id+'">Edit</button><button class="btn sm danger" data-act="del" data-k="'+k+'">'+(ui.confirm===k?'Confirm delete':'Delete')+'</button></td></tr>'}).join('')+'</tbody></table></div>'+(L.length?'':emptyBox('No programmes yet. Add B.Tech (8 semesters), BCA (6), MCA (4), MBA (4).'))+
+  '<p class="note" style="margin:8px 0 0">Link each department to its programme in Masters → Departments. A year and section cannot go beyond the programme length.</p>';
+}
+function termStatus(x){return x.startDate>today?['b-wait','Upcoming']:x.endDate<today?['','Past']:['b-ok','Current']}
+function mTerm(){
+  var cur=curTerm(),L=S.terms.slice().sort(function(a,b){return b.startDate.localeCompare(a.startDate)});
+  var nxt=cur?(cur.kind==='odd'?'Start even semester':'Start next session (odd semester)'):'';
+  var box=cur?'<div class="panel"><p style="margin:0"><b>'+esc(cur.session)+' · '+(cur.kind==='odd'?'Odd':'Even')+' semesters</b> ('+(cur.kind==='odd'?'1, 3, 5, 7':'2, 4, 6, 8')+') · '+fmtLong(cur.startDate)+' – '+fmtLong(cur.endDate)+'</p><p class="note" style="margin:4px 0 8px">Year 1 is in semester '+(cur.kind==='odd'?1:2)+', year 2 in '+(cur.kind==='odd'?3:4)+', year 3 in '+(cur.kind==='odd'?5:6)+', year 4 in '+(cur.kind==='odd'?7:8)+'. Programmes with fewer semesters stop earlier.</p><button class="btn primary sm" data-act="nextterm">'+nxt+'</button></div>':emptyBox('No term yet. Add the current one, for example 2026-27 Odd.');
+  return box+'<div class="scroll"><table class="tbl"><thead><tr><th>Session</th><th>Term</th><th>Semesters</th><th>Starts</th><th>Ends</th><th>Status</th><th></th></tr></thead><tbody>'+
+  L.map(function(x){var k='term:'+x.id,st=termStatus(x);return '<tr><td><b>'+esc(x.session)+'</b></td><td>'+(x.kind==='odd'?'Odd':'Even')+'</td><td class="mono">'+(x.kind==='odd'?'1, 3, 5, 7':'2, 4, 6, 8')+'</td><td class="mono">'+fmtLong(x.startDate)+'</td><td class="mono">'+fmtLong(x.endDate)+'</td><td><span class="badge '+st[0]+'">'+st[1]+'</span></td><td class="act"><button class="btn sm" data-act="edit" data-t="term" data-id="'+x.id+'">Edit</button><button class="btn sm danger" data-act="del" data-k="'+k+'">'+(ui.confirm===k?'Confirm delete':'Delete')+'</button></td></tr>'}).join('')+'</tbody></table></div>';
+}
+function mSubj(){
+  var progs=S.programmes.map(function(p){return [p.id,p.code]}),dl=S.depts.map(function(d){return [d.id,d.code]}).concat([['common','Common to all']]);
+  var L=S.subjects.filter(function(s){return hit(mfv('subj','q'),[s.code,s.name])&&(!mfv('subj','prog')||s.programmeId===mfv('subj','prog'))&&(!mfv('subj','dept')||(mfv('subj','dept')==='common'?!s.deptId:s.deptId===mfv('subj','dept')))&&(!mfv('subj','sem')||String(s.semester)===mfv('subj','sem'))});
+  var semOpts=[1,2,3,4,5,6,7,8].map(function(n){return [String(n),'Semester '+n]});
+  var shown=L.slice(0,300);
+  return mfBar('subj',[mfTxt('subj','Search','Code or name'),mfSel('subj','prog','Programme',progs),mfSel('subj','dept','Department',dl),mfSel('subj','sem','Semester',semOpts)],L.length,S.subjects.length)+
+  '<div class="scroll"><table class="tbl"><thead><tr><th>Code</th><th>Subject</th><th>Programme</th><th>Department</th><th>Sem</th><th>Year</th><th>Type</th><th>Units</th><th></th></tr></thead><tbody>'+
+  shown.map(function(s){var k='subj:'+s.id,p=progById(s.programmeId),d=s.deptId?deptById(s.deptId):null;return '<tr><td class="mono">'+esc(s.code)+'</td><td><b>'+esc(s.name)+'</b></td><td>'+esc(p?p.code:'')+'</td><td>'+(d?dtag(d.id):'<span class="badge b-wait">Common</span>')+'</td><td class="mono">'+s.semester+' <span class="note">'+(s.semester%2?'odd':'even')+'</span></td><td class="mono">'+Math.ceil(s.semester/2)+'</td><td>'+s.type+'</td><td class="mono">'+s.units+'</td><td class="act"><button class="btn sm" data-act="edit" data-t="subj" data-id="'+s.id+'">Edit</button><button class="btn sm danger" data-act="del" data-k="'+k+'">'+(ui.confirm===k?'Confirm delete':'Delete')+'</button></td></tr>'}).join('')+'</tbody></table></div>'+
+  (L.length>shown.length?'<p class="note">Showing the first '+shown.length+'. Use the filters to narrow the list.</p>':'')+(L.length?'':noMatch(S.subjects.length,'No subjects yet. Add them one at a time or paste a list with Import.'));
+}
+function subjCount(v){return S.syllabus.filter(function(r){return r.subjectId===v}).length}
+function importSubjects(v){
+  var prog=progById(v.programmeId);if(!prog)return {err:'Choose a programme.'};
+  var dept=v.deptId==='common'?null:deptById(v.deptId);if(v.deptId!=='common'&&!dept)return {err:'Choose a department, or Common to all.'};
+  var defSem=parseInt(v.semester,10)||0,lines=String(v.text||'').split(/\r?\n/).map(function(l){return l.trim()}).filter(Boolean),add=[],skipped=0,seen={};
+  if(!lines.length)return {err:'Paste at least one line.'};
+  if(lines.length>500)return {err:'Import up to 500 lines at a time.'};
+  for(var i=0;i<lines.length;i++){
+    var p=lines[i].split(/\t|,/).map(function(x){return x.trim().replace(/^"|"$/g,'')});
+    if(i===0&&/^code$/i.test(p[0]))continue;
+    var code=p[0],name=p[1],sem=parseInt(p[2],10)||defSem,type=(p[3]||'Theory'),units=parseInt(p[4],10)||5;
+    type=type.charAt(0).toUpperCase()+type.slice(1).toLowerCase();
+    if(!code||!name)return {err:'Line '+(i+1)+': needs a code and a name (code, name, semester, type, units).'};
+    if(!sem||sem<1||sem>prog.semesters)return {err:'Line '+(i+1)+': semester must be from 1 to '+prog.semesters+' for '+prog.code+'.'};
+    if(['Theory','Lab','Training'].indexOf(type)<0)return {err:'Line '+(i+1)+': type must be Theory, Lab or Training.'};
+    if(units<1||units>30)return {err:'Line '+(i+1)+': units must be from 1 to 30.'};
+    var key=code.toLowerCase(),did=dept?dept.id:null;
+    if(seen[key]||S.subjects.some(function(s){return s.programmeId===prog.id&&(s.deptId||null)===did&&s.code.toLowerCase()===key})){skipped++;continue}
+    seen[key]=1;add.push({id:uid('sb'),code:code,name:name,programmeId:prog.id,deptId:did,semester:sem,type:type,units:units});
+  }
+  return {add:add,skipped:skipped};
+}
+
 function tryDelete(k){
   var p=k.split(':'),kind=p[0],id=p[1],n;
   if(kind==='dept'){
@@ -1431,6 +1735,14 @@ function tryDelete(k){
     n=S.wplans.filter(function(r){return r.loadId===id}).length;
     if(n)return toast('This load type is used in '+n+' weekly plan(s), so it cannot be deleted.',true);
     S.loads=S.loads.filter(function(x){return x.id!==id});
+  } else if(kind==='prog'){
+    n=S.depts.filter(function(x){return x.programmeId===id}).length;var ns=S.subjects.filter(function(x){return x.programmeId===id}).length;
+    if(n||ns)return toast('This programme has '+n+' department(s) and '+ns+' subject(s). Move or delete them first.',true);
+    S.programmes=S.programmes.filter(function(x){return x.id!==id});
+  } else if(kind==='term'){S.terms=S.terms.filter(function(x){return x.id!==id})
+  } else if(kind==='subj'){
+    n=subjCount(id);if(n)return toast('This subject has '+n+' syllabus update(s), so it cannot be deleted.',true);
+    S.subjects=S.subjects.filter(function(x){return x.id!==id});
   } else if(kind==='off'){S.holidays=S.holidays.filter(function(x){return x.id!==id})
   } else if(kind==='ev'){S.events=S.events.filter(function(x){return x.id!==id})}
   save();toast('Deleted.');
@@ -1445,6 +1757,9 @@ document.addEventListener('click',function(e){
     case 'logoutall':api('POST','/api/auth/logout-all').catch(function(){}).then(function(){signedOut()});return;
     case 'logout':api('POST','/api/auth/logout').catch(function(){}).then(function(){signedOut()});return;
     case 'syncnow':save();break;
+    case 'nav':ui.tab=d.tab;if(d.sub){var sb=JSON.parse(d.sub);Object.keys(sb).forEach(function(k){ui[k]=sb[k]})}ui.navDrawer=false;ui.confirm=null;if(d.tab==='audit')loadAudit(true);window.scrollTo(0,0);break;
+    case 'navgrp':{var gid=d.g,cur=ui.navOpen[gid];if(cur===undefined){var mm=menuFor(me().role).filter(function(g){return g.id===gid})[0];cur=mm?mm.items.some(navActive):false}ui.navOpen[gid]=!cur;break}
+    case 'navtoggle':ui.navDrawer=!ui.navDrawer;break;
     case 'tab':ui.tab=d.v;if(d.v==='audit')loadAudit(true);break;
     case 'auapply':{['q','user','entity','action','from','to'].forEach(function(k){var el=document.getElementById('au-'+k);if(el)ui.auF[k]=el.value});loadAudit(true);return}
     case 'aureset':ui.auF={q:'',user:'',entity:'',action:'',from:'',to:''};loadAudit(true);return;
@@ -1465,7 +1780,7 @@ document.addEventListener('click',function(e){
     case 'avday':ui.avDate=d.n==='0'?today:addDays(ui.avDate,+d.n);break;
     case 'togglePast':ui.evShowPast=!ui.evShowPast;break;
     case 'add':open(d.t,{});return;
-    case 'edit':{var src={dept:S.depts,class:S.classes,slot:S.slots,resource:S.resources,user:S.users,building:S.buildings,floor:S.floors,load:S.loads,offday:S.holidays}[d.t].filter(function(x){return x.id===d.id})[0];open(d.t,Object.assign({},src));return}
+    case 'edit':{var src={dept:S.depts,class:S.classes,slot:S.slots,resource:S.resources,user:S.users,building:S.buildings,floor:S.floors,load:S.loads,offday:S.holidays,prog:S.programmes,term:S.terms,subj:S.subjects}[d.t].filter(function(x){return x.id===d.id})[0];open(d.t,Object.assign({},src));return}
     case 'lunch':{var ldd=deptById(d.id);if(ldd)open('lunch',{id:ldd.id,lunch:(ldd.lunchSlots||[]).slice()});return}
     case 'addbreak':{var eb=S.slots.filter(function(x){return x.isBreak})[0];open('slot',eb?Object.assign({},eb):{label:'Lunch',start:'13:15',end:'14:00',isBreak:true});return}
     case 'fullday':{var fl=slotOpts();open('fullday',{resId:ui.ttMode==='week'?ui.ttRes:'',days:[ui.ttDay],from:fl.length?fl[0][0]:'',to:fl.length?fl[fl.length-1][0]:'',title:'',faculty:'',classId:ui.lastClass||''});return}
@@ -1490,6 +1805,13 @@ document.addEventListener('click',function(e){
     case 'trsave':{var terr=trApplyDrafts();if(terr){toast(terr,true);return}ui.trPending=ui.trDraft;ui.trDraft={};save();break}
     case 'trdiscard':ui.trDraft={};break;
     case 'trgo':ui.tab='track';ui.trView='plan';ui.trWeek=d.w;ui.trMonth=addD(d.w,4).slice(0,7);window.scrollTo(0,0);break;
+    case 'sysave':sySave();return;
+    case 'sycsv':syCsv();return;
+    case 'syunlock':open('syunlock',{classId:ui.syClass,fn:ui.syFn,until:addD(today,3),note:''});return;
+    case 'sylock':S.sunlocks=S.sunlocks.filter(function(x){return !(x.classId===ui.syClass&&x.fortnight===ui.syFn)});save();toast('Fortnight locked again.');break;
+    case 'subimp':open('subimp',{text:'',deptId:'common',programmeId:(S.programmes[0]||{}).id,semester:''});return;
+    case 'gosyl':ui.tab='syl';ui.sylView='update';ui.syFn=d.fn;ui.syClass='';window.scrollTo(0,0);break;
+    case 'nextterm':{var ct=curTerm();if(!ct)break;var odd=ct.kind==='odd',y0=parseInt(ct.session.slice(0,4),10),ns2=odd?ct.session:(y0+1)+'-'+('0'+((y0+2)%100)).slice(-2),st2=mondayOf(addD(ct.endDate,odd?34:66));open('term',{session:ns2,kind:odd?'even':'odd',startDate:st2,endDate:addD(st2,125)});return}
     case 'wkunlock':open('wkunlock',{w:d.w,ids:trIds(ui.trClass),until:addD(today,3),note:''});return;
     case 'wklock':{var lids=trIds(ui.trClass);S.unlocks=S.unlocks.filter(function(x){return !(x.weekStart===d.w&&lids.indexOf(x.classId)>-1)});save();toast('Week locked again.');break}
     case 'vrelease':open('vrel',{id:d.id,releaseNote:''});return;
@@ -1509,6 +1831,8 @@ document.addEventListener('click',function(e){
   render();
 });
 document.addEventListener('input',function(e){
+  var su=e.target.closest('[data-syu]');if(su){var pe=document.querySelector('[data-syp="'+su.dataset.syu+'"]');if(pe&&pe.dataset.auto==='1'){pe.value=su.value===''?'':Math.min(100,Math.round(+su.value*100/(+su.dataset.tot||1)))}return}
+  var sp=e.target.closest('[data-syp]');if(sp){sp.dataset.auto='0';return}
   var hi=e.target.closest&&e.target.closest('input.hrs');
   if(hi){var cl=hi.value.replace(/[^0-9.]/g,'').replace(/^(\d{0,2})(\d*)/,'$1$2').replace(/(\..*)\./,'$1');var m=cl.match(/^(\d{0,2})(\.\d?)?/);cl=m?(m[1]+(m[2]||'')):'';if(cl!==hi.value)hi.value=cl}
 });
@@ -1533,6 +1857,7 @@ document.addEventListener('change',function(e){
     else{var tc=classById(tt.slice(2));if(tc)tc.tracked=ton}
     save();render();return;
   }
+  var scb=e.target.closest('[data-sycheck]');if(scb){ui.syRepOnly=scb.checked?'1':'';render();return}
   var al=e.target.closest('[data-alloc]');
   if(al){
     var r=resById(al.dataset.alloc),nd=al.value||null;
@@ -1547,6 +1872,7 @@ document.addEventListener('change',function(e){
   if(k==='chNote')return;
   if(k==='ttDept')ui.ttRes=null;
   if(k==='trDept')ui.trClass='';
+  if(k==='syDept')ui.syClass='';
   if(k==='trPick'){if(!el.value)return;ui.trWeek=mondayOf(el.value)}
   if(k==='clDept')ui.clId=null;
   if(k==='chDept')ui.chClass='';
