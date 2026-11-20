@@ -461,3 +461,7 @@ main>*{min-width:0;max-width:100%}
 @media print{.syfoot{display:none}}
 .sytbl td:first-child{white-space:nowrap}
 .filters label.chk{display:flex;flex-direction:row;align-items:center;gap:6px;align-self:end;padding-bottom:8px}
+
+.gchip{display:inline-flex;align-items:center;gap:4px;padding:2px 4px 2px 9px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-weight:600;font-size:12px;margin-right:2px}
+.gchip small{font-weight:500;opacity:.8}.gchip .gx{border:0;background:none;cursor:pointer;color:inherit;padding:0 5px;font-size:14px;line-height:1}
+.gchip .gx:hover{color:var(--danger)}

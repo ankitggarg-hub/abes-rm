@@ -291,3 +291,16 @@ CREATE TABLE IF NOT EXISTS syllabus_unlocks (
   by_name         text NOT NULL DEFAULT '',
   CONSTRAINT syllabus_unlocks_unique UNIQUE (class_id, fortnight_start)
 );
+
+
+-- Lab groups: a section split into G1, G2...; a timetable class may belong to one group (safe to re-run)
+CREATE TABLE IF NOT EXISTS class_groups (
+  id       text PRIMARY KEY,
+  class_id text NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  name     text NOT NULL,
+  strength int  NOT NULL DEFAULT 0 CHECK (strength >= 0),
+  CONSTRAINT class_groups_unique UNIQUE (class_id, name)
+);
+ALTER TABLE timetable ADD COLUMN IF NOT EXISTS group_id text NOT NULL DEFAULT '';
+ALTER TABLE timetable DROP CONSTRAINT IF EXISTS timetable_class_unique;
+ALTER TABLE timetable ADD CONSTRAINT timetable_class_unique UNIQUE (class_id, group_id, day, slot_id) DEFERRABLE INITIALLY DEFERRED;
